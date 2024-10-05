@@ -1,10 +1,10 @@
 {{define "title"}}WAR{{end}}
-{{define "body"}}
+{{define "game"}}
 <main>
-    <section class="grid grid-cols-3 gap-4">
-        <section class="flex"></section>
-        <section></section>
-        <section></section>
+    <section class="grid grid-flow-col grid-cols-game grid-rows-1 gap-4">
+        {{template "player" .Player1}}
+        {{template "battleground" .}}
+        {{template "player" .Player2}}
     </section>
 </main>
 {{end}}

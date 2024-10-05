@@ -554,14 +554,50 @@ video {
   display: none;
 }
 
+.flex {
+  display: flex;
+}
+
 .grid {
   display: grid;
 }
 
-.grid-cols-3 {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+.grid-flow-col {
+  grid-auto-flow: column;
+}
+
+.grid-cols-game {
+  grid-template-columns: 1fr 3fr 1fr;
+}
+
+.grid-rows-1 {
+  grid-template-rows: repeat(1, minmax(0, 1fr));
+}
+
+.flex-row {
+  flex-direction: row;
+}
+
+.flex-col {
+  flex-direction: column;
+}
+
+.items-center {
+  align-items: center;
+}
+
+.justify-center {
+  justify-content: center;
+}
+
+.justify-evenly {
+  justify-content: space-evenly;
 }
 
 .gap-4 {
   gap: 1rem;
+}
+
+.align-baseline {
+  vertical-align: baseline;
 }
