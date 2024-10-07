@@ -26,9 +26,7 @@ func main() {
 
 	fs := utilhttp.RequireReadOnlyMethods(utilhttp.LogRequest(http.FileServer(http.Dir("./assets"))))
 	http.Handle("/assets/", http.StripPrefix("/assets/", fs))
-
 	http.Handle("/ping", utilhttp.LogRequest(utilhttp.RequireReadOnlyMethods(http.HandlerFunc(ping))))
-
 	game.SetupHandlers()
 
 	log.Printf("Starting server at %s:%d\n", *hostFlag, *portFlag)

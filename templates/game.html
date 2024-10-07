@@ -1,10 +1,16 @@
 {{define "title"}}WAR{{end}}
 {{define "game"}}
 <main>
-    <section class="grid grid-flow-col grid-cols-game grid-rows-1 gap-4">
-        {{template "player" .Player1}}
-        {{template "battleground" .}}
-        {{template "player" .Player2}}
+    <section class="grid grid-rows-2 grid-cols-1">
+        <section class="grid grid-flow-col grid-cols-game grid-rows-1 gap-4 px-4 py-2">
+            {{template "player" .Player1}}
+            {{template "battleground" .}}
+            {{template "player" .Player2}}
+        </section>
+        <section class="grid grid-rows-1 grid-cols-2 px-4 py-2">
+            {{template "warzone" .}}
+            {{template "warzone" .}}
+        </section>
     </section>
 </main>
 {{end}}

@@ -6,6 +6,10 @@ check:
 	go mod verify
 .PHONY: check
 
+test:
+	go test -v ./...
+.PHONY: test
+
 start:
 	make -j 2 start-server start-tailwinds
 .PHONY: start
