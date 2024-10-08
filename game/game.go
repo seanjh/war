@@ -134,7 +134,8 @@ type Game struct {
 }
 
 func newShuffledDeck() Deck {
-	return Deck{}
+	d := make([]Card, 52)
+	return d
 }
 
 func splitDeck(d Deck) (Deck, Deck) {
@@ -160,7 +161,7 @@ func newGame() *Game {
 	}
 }
 
-func renderGame() http.Handler {
+func renderPage() http.Handler {
 	tmpl := template.Must(template.ParseFiles(
 		filepath.Join("templates", "layout.html"),
 		filepath.Join("templates", "game.html"),
@@ -173,10 +174,20 @@ func renderGame() http.Handler {
 	})
 }
 
-func flip(w http.ResponseWriter, r *http.Request) {}
+func flip() func(http.ResponseWriter, *http.Request) {
+	tmpl := template.Must(template.ParseFiles(
+		filepath.Join("templates", "game.html"),
+		filepath.Join("templates", "player.html"),
+		filepath.Join("templates", "battleground.html"),
+		filepath.Join("templates", "warzone.html"),
+	))
+	return func(w http.ResponseWriter, r *http.Request) {
+		tmpl.ExecuteTemplate(w, "game", game)
+	}
+}
 
 func SetupHandlers() {
 	game = newGame()
-	http.Handle("/", u.RequireReadOnlyMethods(u.LogRequest(renderGame())))
-	http.Handle("/flip", u.RequireMethods(u.LogRequest(http.HandlerFunc(flip))))
+	http.Handle("/", u.RequireReadOnlyMethods(u.LogRequest(renderPage())))
+	http.Handle("/flip", u.RequireMethods(u.LogRequest(http.HandlerFunc(flip())), http.MethodPost))
 }
