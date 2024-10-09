@@ -134,12 +134,23 @@ func TestCutDeck(t *testing.T) {
 		}
 	}{
 		{
-			"empty",
+			"empty deck",
 			Deck{},
 			struct {
 				left  Deck
 				right Deck
 			}{Deck{}, Deck{}},
+		},
+		{
+			"one card",
+			Deck{Card{"C", 2}},
+			struct {
+				left  Deck
+				right Deck
+			}{
+				Deck{Card{"C", 2}},
+				Deck{},
+			},
 		},
 	}
 
