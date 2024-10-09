@@ -3,6 +3,8 @@ package game
 import (
 	"fmt"
 	"html/template"
+	"log"
+	"math/rand/v2"
 	"net/http"
 	"path/filepath"
 
@@ -13,7 +15,7 @@ import (
 var game *Game
 
 var standardDeck = Deck{
-	Card{Suit: SuitClub, Value: Two},
+	Card{Suit: SuitClub, Value: 2},
 	Card{},
 }
 
@@ -34,83 +36,68 @@ const (
 	SuitSpade   Suit = "S"
 )
 
+var SuitNames = map[Suit]string{
+	SuitClub:    "Clubs",
+	SuitDiamond: "Diamonds",
+	SuitHeart:   "Hearts",
+	SuitSpade:   "Spades",
+}
+
 func (s Suit) Name() string {
-	switch s {
-	case SuitClub:
-		return "Clubs"
-	case SuitHeart:
-		return "Hearts"
-	case SuitDiamond:
-		return "Diamonds"
-	case SuitSpade:
-		return "Spades"
-	default:
-		return "Unrecognized"
+	name, ok := SuitNames[s]
+	if !ok {
+		return ""
 	}
+	return name
 }
 
 const (
-	Two   FaceValue = 2
-	Three FaceValue = 3
-	Four  FaceValue = 4
-	Five  FaceValue = 5
-	Six   FaceValue = 6
-	Seven FaceValue = 7
-	Eight FaceValue = 8
-	Nine  FaceValue = 9
-	Ten   FaceValue = 10
 	Jack  FaceValue = 11
 	Queen FaceValue = 12
 	King  FaceValue = 13
 	Ace   FaceValue = 14
 )
 
+var FaceValueSlugs = map[FaceValue]string{
+	Jack:  "J",
+	Queen: "Q",
+	King:  "K",
+	Ace:   "A",
+}
+
 func (v FaceValue) Slug() string {
-	switch v {
-	case Jack:
-		return "J"
-	case Queen:
-		return "Q"
-	case King:
-		return "K"
-	case Ace:
-		return "A"
-	default:
+	if v > Ace {
+		return ""
+	}
+	slug, ok := FaceValueSlugs[v]
+	if !ok {
 		return fmt.Sprint(v)
 	}
+	return slug
+}
+
+var FaceValueNames = map[FaceValue]string{
+	2:     "Two",
+	3:     "Three",
+	4:     "Four",
+	5:     "Five",
+	6:     "Six",
+	7:     "Seven",
+	8:     "Eight",
+	9:     "Nine",
+	10:    "Ten",
+	Jack:  "Jack",
+	Queen: "Queen",
+	King:  "King",
+	Ace:   "Ace",
 }
 
 func (v FaceValue) Name() string {
-	switch v {
-	case Two:
-		return "Two"
-	case Three:
-		return "Three"
-	case Four:
-		return "Four"
-	case Five:
-		return "Five"
-	case Six:
-		return "Six"
-	case Seven:
-		return "Seven"
-	case Eight:
-		return "Eight"
-	case Nine:
-		return "Nine"
-	case Ten:
-		return "Ten"
-	case Jack:
-		return "Jack"
-	case Queen:
-		return "Queen"
-	case King:
-		return "King"
-	case Ace:
-		return "Ace"
-	default:
-		return "Unrecognized"
+	name, ok := FaceValueNames[v]
+	if !ok {
+		return "N/A"
 	}
+	return name
 }
 
 func (c Card) Name() string {
@@ -133,29 +120,79 @@ type Game struct {
 	Player2 Player
 }
 
-func newShuffledDeck() Deck {
-	d := make([]Card, 52)
+func newDeck() Deck {
+	d := make([]Card, 0)
+	for _, s := range []Suit{SuitClub, SuitDiamond, SuitHeart, SuitSpade} {
+		var v FaceValue
+		for v = 2; v <= Ace; v++ {
+			d = append(d, Card{Suit: s, Value: v})
+		}
+	}
 	return d
 }
 
-func splitDeck(d Deck) (Deck, Deck) {
-	return Deck{}, Deck{}
+// cutDeck returns 2 new decks, each containing exactly 1/2 of the original deck, with
+// the extra card (in odd-sized decks) added to the first (left) deck.
+func cutDeck(d Deck) (Deck, Deck) {
+	left, right := make(Deck, 0), make(Deck, 0)
+	for i := 0; i < len(d); i++ {
+		c := Card{d[i].Suit, d[i].Value}
+		if i%2 == 0 {
+			left = append(left, c)
+		} else {
+			right = append(right, c)
+		}
+	}
+	return left, right
+}
+
+// riffleShuffle returns a copy of the deck using a rough approximation of the "Riffle shuffle"
+// technique - where cards are cut into 2 smaller decks, and interleaved. See
+// [Riffle shuffle permutation] for details.
+//
+// [Riffle shuffle permutation]: https://en.wikipedia.org/wiki/Riffle_shuffle_permutation
+func riffleShuffle(d Deck, rounds int) Deck {
+	log.Printf("Performing riffle shuffle for deck. size=%d, rounds=%d", len(d), rounds)
+	r := make(Deck, 0, len(d))
+	for i, c := range d {
+		r[i] = Card{c.Suit, c.Value}
+	}
+
+	for i := 0; i < rounds; i++ {
+		left, right := cutDeck(r)
+		log.Printf("Cut deck into 2 packages. left=%d, right=%d", len(left), len(right))
+
+		leftI := 0
+		rightI := 0
+		for j := 0; j < len(left)+len(right); j++ {
+			// interleave cards randomly from each cut
+			if rand.IntN(1) == 1 {
+				r[j] = right[rightI]
+				rightI++
+			} else {
+				r[j] = left[leftI]
+				leftI++
+			}
+		}
+		log.Printf("Finished riffle shuffle round #%d", i+1)
+	}
+	return r
 }
 
 func newGame() *Game {
-	deck := newShuffledDeck()
-	deck1, deck2 := splitDeck(deck)
+	deck := riffleShuffle(newDeck(), 5)
+	deck1, deck2 := cutDeck(deck)
 	return &Game{
 		Player1: Player{
 			Deck:     deck1,
 			Id:       "1",
-			InBattle: Card{Suit: SuitClub, Value: Two},
+			InBattle: Card{Suit: SuitClub, Value: 2},
 			Name:     "One",
 		},
 		Player2: Player{
 			Deck:     deck2,
 			Id:       "1",
-			InBattle: Card{Suit: SuitHeart, Value: Two},
+			InBattle: Card{Suit: SuitHeart, Value: 2},
 			Name:     "Two",
 		},
 	}
