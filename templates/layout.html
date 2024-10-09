@@ -1,0 +1,19 @@
+{{define "layout"}}
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{{template "title"}}</title>
+    <link href="/assets/main.css" rel="stylesheet">
+</head>
+
+<body
+    class="h-screen bg-gray-100 text-gray-900 dark:bg-gray-900 dark:text-gray-100 flex items-center justify-center transition-colors duration-300 antialiased">
+    {{template "game" .}}
+    <script src="https://unpkg.com/htmx.org@2.0.2"></script>
+</body>
+
+</html>
+{{end}}
