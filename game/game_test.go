@@ -152,6 +152,17 @@ func TestCutDeck(t *testing.T) {
 				Deck{},
 			},
 		},
+		{
+			"two cards",
+			Deck{Card{"C", 2}, Card{"H", 2}},
+			struct {
+				left  Deck
+				right Deck
+			}{
+				Deck{Card{"C", 2}},
+				Deck{Card{"H", 2}},
+			},
+		},
 	}
 
 	for _, c := range testCases {
