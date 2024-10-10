@@ -11,16 +11,6 @@ import (
 	u "github.com/seanjh/war/utilhttp"
 )
 
-// Temporary global game instance
-var game *Game
-
-var standardDeck = Deck{
-	Card{Suit: SuitClub, Value: 2},
-	Card{},
-}
-
-type Deck []Card
-
 type Suit string
 type FaceValue int
 
@@ -108,20 +98,34 @@ func (c Card) Slug() string {
 	return fmt.Sprintf("%s%s", c.Value.Slug(), c.Suit)
 }
 
-type Player struct {
-	Deck     Deck
-	InBattle Card
-	Name     string
-	Id       string
+// TODO(sean) - takes a deck
+// returns a card from next()
+type Shuffler interface {
+    done() bool
+	next() (Card, bool)
 }
 
-type Game struct {
-	Player1 Player
-	Player2 Player
+type RiffleShuffler struct {
+    leftCut []Card
+    rightCut []Card
+}
+
+func NewRiffleShuffler(c []Card) RiffleShuffler {
+    left, right := cutDeck(c)
+    return RiffleShuffler{left, right}
+}
+
+func (s Shuffler) next() (Card, bool) {
+}
+
+type Deck struct {
+	cards    []Card
+	shuffler Shuffler
 }
 
 func newDeck() Deck {
-	d := make([]Card, 0)
+	c := make([]Card, 0)
+	d := Deck{c}
 	for _, s := range []Suit{SuitClub, SuitDiamond, SuitHeart, SuitSpade} {
 		var v FaceValue
 		for v = 2; v <= Ace; v++ {
@@ -146,28 +150,49 @@ func cutDeck(d Deck) (Deck, Deck) {
 	return left, right
 }
 
+type Player struct {
+	Deck     Deck
+	InBattle Card
+	Name     string
+	Id       string
+}
+
+type Game struct {
+	Player1 Player
+	Player2 Player
+}
+
 // riffleShuffle returns a copy of the deck using a rough approximation of the "Riffle shuffle"
 // technique - where cards are cut into 2 smaller decks, and interleaved. See
 // [Riffle shuffle permutation] for details.
+
+// IT takes just seven ordinary, imperfect shuffles to mix a deck of cards
+// thoroughly, researchers have found. Fewer are not enough and more do not
+// significantly improve the mixing.
+
+//
+// [In Shuffling Cards, 7 Is Winning Number]: https://www.nytimes.com/1990/01/09/science/in-shuffling-cards-7-is-winning-number.html
+const defaultShuffleRounds = 7
+
 //
 // [Riffle shuffle permutation]: https://en.wikipedia.org/wiki/Riffle_shuffle_permutation
-func riffleShuffle(d Deck, rounds int) Deck {
-	log.Printf("Performing riffle shuffle for deck. size=%d, rounds=%d", len(d), rounds)
-	r := make(Deck, 0, len(d))
+func riffleShuffle(d Deck) Deck {
+	log.Printf("Performing riffle shuffle for deck. size=%d, rounds=%d", len(d), defaultShuffleRounds)
+    r := {cards: make(Deck, 0, len(d)), shuffler:  {}}
 	for i, c := range d {
 		r[i] = Card{c.Suit, c.Value}
 	}
 
-	for i := 0; i < rounds; i++ {
+	for i := 0; i < defaultShuffleRounds; i++ {
 		left, right := cutDeck(r)
-		log.Printf("Cut deck into 2 packages. left=%d, right=%d", len(left), len(right))
+		log.Printf("Cut deck into 2 packages. left=%d, right=%d", len(left.cards), len(right.cards))
 
 		leftI := 0
 		rightI := 0
-		for j := 0; j < len(left)+len(right); j++ {
+		for j := 0; j < len(left.cards)+len(right.cards); j++ {
 			// interleave cards randomly from each cut
-			if rand.IntN(1) == 1 {
-				r[j] = right[rightI]
+			if rand.IntN(1) == 1 && rightI < len(right.cards) {
+				r[j] = right.cards[rightI]
 				rightI++
 			} else {
 				r[j] = left[leftI]
@@ -180,7 +205,7 @@ func riffleShuffle(d Deck, rounds int) Deck {
 }
 
 func newGame() *Game {
-	deck := riffleShuffle(newDeck(), 5)
+	deck := riffleShuffle(newDeck())
 	deck1, deck2 := cutDeck(deck)
 	return &Game{
 		Player1: Player{
@@ -222,6 +247,9 @@ func flip() func(http.ResponseWriter, *http.Request) {
 		tmpl.ExecuteTemplate(w, "game", game)
 	}
 }
+
+// Temporary global game instance
+var game *Game
 
 func SetupHandlers() {
 	game = newGame()
