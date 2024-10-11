@@ -160,7 +160,7 @@ func TestCutDeck(t *testing.T) {
 	}
 }
 
-func TestRiffleShuffleEquals(t *testing.T) {
+func TestShuffle(t *testing.T) {
 	testCases := []struct {
 		scenario string
 		deck     Deck
@@ -176,11 +176,31 @@ func TestRiffleShuffleEquals(t *testing.T) {
 			deck:     Deck{Card{"C", 2}},
 			expected: Deck{Card{"C", 2}},
 		},
+		{
+			scenario: "five cards",
+			deck: Deck{
+				Card{"C", 2},
+				Card{"D", 2},
+				Card{"H", 2},
+				Card{"S", 2},
+				Card{"S", Ace},
+			},
+			expected: Deck{
+				Card{"H", 2},
+				Card{"C", 2},
+				Card{"S", 2},
+				Card{"D", 2},
+				Card{"S", Ace},
+			},
+		},
 	}
+
+	nonRandom := func() float32 { return 0.0 }
+	s := RiffleShuffler{random: nonRandom}
 
 	for _, c := range testCases {
 		t.Run(c.scenario, func(t *testing.T) {
-			c.deck.shuffle(riffleShuffler)
+			c.deck.shuffle(s)
 			assert.Equal(t, c.expected, c.deck)
 		})
 	}

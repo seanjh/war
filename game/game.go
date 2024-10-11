@@ -111,7 +111,7 @@ func NewDeck() Deck {
 	return d
 }
 
-// cutDeck returns 2 new decks, each containing exactly 1/2 of the original deck, with
+// cut returns 2 new decks, each containing exactly 1/2 of the original deck, with
 // the extra card (in odd-sized decks) added to the first (left) deck.
 func (d Deck) cut() (Deck, Deck) {
 	left, right := make(Deck, 0), make(Deck, 0)
@@ -126,35 +126,48 @@ func (d Deck) cut() (Deck, Deck) {
 	return left, right
 }
 
-type Shuffler = func(d Deck) Deck
+type Shuffler interface {
+	shuffle(Deck) Deck
+}
+
+type RiffleShuffler struct {
+	// random returns a value in the range [0.0,1.0), which determines from
+	// which cut to pull the next card during a shuffle.
+	random func() float32
+}
+
+func NewRiffleShuffler() *RiffleShuffler {
+	s := RiffleShuffler{random: rand.Float32}
+	return &s
+}
 
 // riffleShuffler returns a copy of the deck using a rough approximation of the "Riffle shuffle"
 // technique - where cards are cut into 2 smaller decks, and interleaved. See
 // [Riffle shuffle permutation] for details.
 //
 // [Riffle shuffle permutation]: https://en.wikipedia.org/wiki/Riffle_shuffle_permutation
-func riffleShuffler(d Deck) Deck {
+func (s RiffleShuffler) shuffle(d Deck) Deck {
+	log.Printf("Starting riffle shuffle for deck: %d", len(d))
 	result := make(Deck, 0)
 
 	left, right := d.cut()
-	log.Printf("Cut deck into 2 packages. left=%d, right=%d", len(left), len(right))
 
 	leftI := 0
 	rightI := 0
 	for i := 0; i < len(left)+len(right); i++ {
-		// interleave cards randomly from each cut
-		takeLeft := rand.IntN(1) == 1
-		if takeLeft && leftI < len(left) {
+		shuffleFromLeft := s.random() < 0.5
+		if shuffleFromLeft && leftI < len(left) {
 			result = append(result, left[leftI])
 			leftI++
 		} else if rightI < len(right) {
 			result = append(result, right[rightI])
 			rightI++
 		} else {
-			log.Printf("Cannot take from left (len: %d) or right (len: %d) cuts: %d", len(left), len(right), i)
+			log.Printf("Cannot take left (len: %d) or right (len: %d): %d", len(left), len(right), i)
 			break
 		}
 	}
+	log.Printf("Finished riffle shuffle for deck: %d", len(d))
 	return result
 }
 
@@ -165,11 +178,11 @@ func riffleShuffler(d Deck) Deck {
 // [In Shuffling Cards, 7 Is Winning Number]: https://www.nytimes.com/1990/01/09/science/in-shuffling-cards-7-is-winning-number.html
 const defaultShuffleRounds = 7
 
-func (d *Deck) shuffle(shuffler Shuffler) {
+func (d *Deck) shuffle(s Shuffler) {
 	log.Printf("Performing shuffle for deck. size=%d, rounds=%d", len(*d), defaultShuffleRounds)
 	for i := 0; i < defaultShuffleRounds; i++ {
-		*d = shuffler(*d)
-		log.Printf("Finished riffle shuffle round #%d", i+1)
+		*d = s.shuffle(*d)
+		log.Printf("Finished shuffle round #%d", i+1)
 	}
 }
 
@@ -199,7 +212,7 @@ type Game struct {
 
 func NewGame() *Game {
 	deck := NewDeck()
-	deck.shuffle(riffleShuffler)
+	deck.shuffle(NewRiffleShuffler())
 	p1d, p2d := deck.cut()
 	return &Game{
 		Player1: Player{
