@@ -98,34 +98,10 @@ func (c Card) Slug() string {
 	return fmt.Sprintf("%s%s", c.Value.Slug(), c.Suit)
 }
 
-// TODO(sean) - takes a deck
-// returns a card from next()
-type Shuffler interface {
-    done() bool
-	next() (Card, bool)
-}
+type Deck []Card
 
-type RiffleShuffler struct {
-    leftCut []Card
-    rightCut []Card
-}
-
-func NewRiffleShuffler(c []Card) RiffleShuffler {
-    left, right := cutDeck(c)
-    return RiffleShuffler{left, right}
-}
-
-func (s Shuffler) next() (Card, bool) {
-}
-
-type Deck struct {
-	cards    []Card
-	shuffler Shuffler
-}
-
-func newDeck() Deck {
-	c := make([]Card, 0)
-	d := Deck{c}
+func NewDeck() Deck {
+	d := make([]Card, 0)
 	for _, s := range []Suit{SuitClub, SuitDiamond, SuitHeart, SuitSpade} {
 		var v FaceValue
 		for v = 2; v <= Ace; v++ {
@@ -137,17 +113,64 @@ func newDeck() Deck {
 
 // cutDeck returns 2 new decks, each containing exactly 1/2 of the original deck, with
 // the extra card (in odd-sized decks) added to the first (left) deck.
-func cutDeck(d Deck) (Deck, Deck) {
+func (d Deck) cut() (Deck, Deck) {
 	left, right := make(Deck, 0), make(Deck, 0)
 	for i := 0; i < len(d); i++ {
 		c := Card{d[i].Suit, d[i].Value}
-		if i%2 == 0 {
+		if i&1 == 1 {
 			left = append(left, c)
 		} else {
 			right = append(right, c)
 		}
 	}
 	return left, right
+}
+
+type Shuffler = func(d Deck) Deck
+
+// riffleShuffler returns a copy of the deck using a rough approximation of the "Riffle shuffle"
+// technique - where cards are cut into 2 smaller decks, and interleaved. See
+// [Riffle shuffle permutation] for details.
+//
+// [Riffle shuffle permutation]: https://en.wikipedia.org/wiki/Riffle_shuffle_permutation
+func riffleShuffler(d Deck) Deck {
+	result := make(Deck, 0)
+
+	left, right := d.cut()
+	log.Printf("Cut deck into 2 packages. left=%d, right=%d", len(left), len(right))
+
+	leftI := 0
+	rightI := 0
+	for i := 0; i < len(left)+len(right); i++ {
+		// interleave cards randomly from each cut
+		takeLeft := rand.IntN(1) == 1
+		if takeLeft && leftI < len(left) {
+			result = append(result, left[leftI])
+			leftI++
+		} else if rightI < len(right) {
+			result = append(result, right[rightI])
+			rightI++
+		} else {
+			log.Printf("Cannot take from left (len: %d) or right (len: %d) cuts: %d", len(left), len(right), i)
+			break
+		}
+	}
+	return result
+}
+
+// It takes just seven ordinary, imperfect shuffles to mix a deck of cards
+// thoroughly, researchers have found. Fewer are not enough and more do not
+// significantly improve the mixing.
+//
+// [In Shuffling Cards, 7 Is Winning Number]: https://www.nytimes.com/1990/01/09/science/in-shuffling-cards-7-is-winning-number.html
+const defaultShuffleRounds = 7
+
+func (d *Deck) shuffle(shuffler Shuffler) {
+	log.Printf("Performing shuffle for deck. size=%d, rounds=%d", len(*d), defaultShuffleRounds)
+	for i := 0; i < defaultShuffleRounds; i++ {
+		*d = shuffler(*d)
+		log.Printf("Finished riffle shuffle round #%d", i+1)
+	}
 }
 
 type Player struct {
@@ -157,68 +180,37 @@ type Player struct {
 	Id       string
 }
 
+// NewPlayer returns a new player.
+func NewPlayer(d Deck, id string, name string) *Player {
+	p := Player{Deck: d, Id: id, Name: name}
+	return &p
+}
+
+type Battle struct {
+	Battle  map[string]Card
+	Warzone map[string][]Card
+}
+
 type Game struct {
 	Player1 Player
 	Player2 Player
+	Battle  []Card
 }
 
-// riffleShuffle returns a copy of the deck using a rough approximation of the "Riffle shuffle"
-// technique - where cards are cut into 2 smaller decks, and interleaved. See
-// [Riffle shuffle permutation] for details.
-
-// IT takes just seven ordinary, imperfect shuffles to mix a deck of cards
-// thoroughly, researchers have found. Fewer are not enough and more do not
-// significantly improve the mixing.
-
-//
-// [In Shuffling Cards, 7 Is Winning Number]: https://www.nytimes.com/1990/01/09/science/in-shuffling-cards-7-is-winning-number.html
-const defaultShuffleRounds = 7
-
-//
-// [Riffle shuffle permutation]: https://en.wikipedia.org/wiki/Riffle_shuffle_permutation
-func riffleShuffle(d Deck) Deck {
-	log.Printf("Performing riffle shuffle for deck. size=%d, rounds=%d", len(d), defaultShuffleRounds)
-    r := {cards: make(Deck, 0, len(d)), shuffler:  {}}
-	for i, c := range d {
-		r[i] = Card{c.Suit, c.Value}
-	}
-
-	for i := 0; i < defaultShuffleRounds; i++ {
-		left, right := cutDeck(r)
-		log.Printf("Cut deck into 2 packages. left=%d, right=%d", len(left.cards), len(right.cards))
-
-		leftI := 0
-		rightI := 0
-		for j := 0; j < len(left.cards)+len(right.cards); j++ {
-			// interleave cards randomly from each cut
-			if rand.IntN(1) == 1 && rightI < len(right.cards) {
-				r[j] = right.cards[rightI]
-				rightI++
-			} else {
-				r[j] = left[leftI]
-				leftI++
-			}
-		}
-		log.Printf("Finished riffle shuffle round #%d", i+1)
-	}
-	return r
-}
-
-func newGame() *Game {
-	deck := riffleShuffle(newDeck())
-	deck1, deck2 := cutDeck(deck)
+func NewGame() *Game {
+	deck := NewDeck()
+	deck.shuffle(riffleShuffler)
+	p1d, p2d := deck.cut()
 	return &Game{
 		Player1: Player{
-			Deck:     deck1,
-			Id:       "1",
-			InBattle: Card{Suit: SuitClub, Value: 2},
-			Name:     "One",
+			Deck: p1d,
+			Id:   "1",
+			Name: "One",
 		},
 		Player2: Player{
-			Deck:     deck2,
-			Id:       "1",
-			InBattle: Card{Suit: SuitHeart, Value: 2},
-			Name:     "Two",
+			Deck: p2d,
+			Id:   "2",
+			Name: "Two",
 		},
 	}
 }
@@ -252,7 +244,7 @@ func flip() func(http.ResponseWriter, *http.Request) {
 var game *Game
 
 func SetupHandlers() {
-	game = newGame()
+	game = NewGame()
 	http.Handle("/", u.RequireReadOnlyMethods(u.LogRequest(renderPage())))
 	http.Handle("/flip", u.RequireMethods(u.LogRequest(http.HandlerFunc(flip())), http.MethodPost))
 }
