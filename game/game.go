@@ -111,9 +111,9 @@ func NewDeck() Deck {
 	return d
 }
 
-// cut returns 2 new decks, each containing exactly 1/2 of the original deck, with
+// Cut returns 2 new decks, each containing exactly 1/2 of the original deck, with
 // the extra card (in odd-sized decks) added to the first (left) deck.
-func (d Deck) cut() (Deck, Deck) {
+func (d Deck) Cut() (Deck, Deck) {
 	left, right := make(Deck, 0), make(Deck, 0)
 	for i := 0; i < len(d); i++ {
 		c := Card{d[i].Suit, d[i].Value}
@@ -127,7 +127,7 @@ func (d Deck) cut() (Deck, Deck) {
 }
 
 type Shuffler interface {
-	shuffle(Deck) Deck
+	Shuffle(Deck) Deck
 }
 
 type RiffleShuffler struct {
@@ -141,16 +141,16 @@ func NewRiffleShuffler() *RiffleShuffler {
 	return &s
 }
 
-// riffleShuffler returns a copy of the deck using a rough approximation of the "Riffle shuffle"
+// RiffleShuffler returns a copy of the deck using a rough approximation of the "Riffle shuffle"
 // technique - where cards are cut into 2 smaller decks, and interleaved. See
 // [Riffle shuffle permutation] for details.
 //
 // [Riffle shuffle permutation]: https://en.wikipedia.org/wiki/Riffle_shuffle_permutation
-func (s RiffleShuffler) shuffle(d Deck) Deck {
+func (s RiffleShuffler) Shuffle(d Deck) Deck {
 	log.Printf("Starting riffle shuffle for deck: %d", len(d))
 	result := make(Deck, 0)
 
-	left, right := d.cut()
+	left, right := d.Cut()
 
 	leftI := 0
 	rightI := 0
@@ -171,26 +171,26 @@ func (s RiffleShuffler) shuffle(d Deck) Deck {
 	return result
 }
 
-// It takes just seven ordinary, imperfect shuffles to mix a deck of cards
-// thoroughly, researchers have found. Fewer are not enough and more do not
-// significantly improve the mixing.
+// "It takes just seven ordinary, imperfect shuffles to mix a deck of cards thoroughly,
+// researchers have found. Fewer are not enough and more do not significantly improve
+// the mixing." via [In Shuffling Cards, 7 Is Winning Number]
 //
 // [In Shuffling Cards, 7 Is Winning Number]: https://www.nytimes.com/1990/01/09/science/in-shuffling-cards-7-is-winning-number.html
 const defaultShuffleRounds = 7
 
-func (d *Deck) shuffle(s Shuffler) {
+// Shuffle randomly mixes the cards in the deck with the given shuffler.
+func (d *Deck) Shuffle(s Shuffler) {
 	log.Printf("Performing shuffle for deck. size=%d, rounds=%d", len(*d), defaultShuffleRounds)
 	for i := 0; i < defaultShuffleRounds; i++ {
-		*d = s.shuffle(*d)
+		*d = s.Shuffle(*d)
 		log.Printf("Finished shuffle round #%d", i+1)
 	}
 }
 
 type Player struct {
-	Deck     Deck
-	InBattle Card
-	Name     string
-	Id       string
+	Deck Deck
+	Name string
+	Id   string
 }
 
 // NewPlayer returns a new player.
@@ -200,35 +200,32 @@ func NewPlayer(d Deck, id string, name string) *Player {
 }
 
 type Battle struct {
-	Battle  map[string]Card
-	Warzone map[string][]Card
+	Battle map[string]Card
+	War    map[string][]Card
 }
 
 type Game struct {
 	Player1 Player
 	Player2 Player
-	Battle  []Card
+	Battle  Battle
 }
 
+// NewGame returns a new Game with 2 Players with equal cuts of a new Deck.
 func NewGame() *Game {
 	deck := NewDeck()
-	deck.shuffle(NewRiffleShuffler())
-	p1d, p2d := deck.cut()
+	deck.Shuffle(NewRiffleShuffler())
+	d1, d2 := deck.Cut()
 	return &Game{
-		Player1: Player{
-			Deck: p1d,
-			Id:   "1",
-			Name: "One",
-		},
-		Player2: Player{
-			Deck: p2d,
-			Id:   "2",
-			Name: "Two",
-		},
+		Player1: *NewPlayer(d1, "1", "Player One"),
+		Player2: *NewPlayer(d2, "2", "Player Two"),
 	}
 }
 
-func renderPage() http.Handler {
+func renderFullPage(name string, filenames ...string) http.Handler {
+	tmpl := template.Must(template.ParseFiles(filenames))
+}
+
+func handleGame() http.Handler {
 	tmpl := template.Must(template.ParseFiles(
 		filepath.Join("templates", "layout.html"),
 		filepath.Join("templates", "game.html"),
@@ -241,7 +238,7 @@ func renderPage() http.Handler {
 	})
 }
 
-func flip() func(http.ResponseWriter, *http.Request) {
+func renderFlip() func(http.ResponseWriter, *http.Request) {
 	tmpl := template.Must(template.ParseFiles(
 		filepath.Join("templates", "game.html"),
 		filepath.Join("templates", "player.html"),
@@ -253,11 +250,24 @@ func flip() func(http.ResponseWriter, *http.Request) {
 	}
 }
 
+func renderHome() func(http.ResponseWriter, *http.Request) {
+	tmpl := template.Must(template.ParseFiles(
+		filepath.Join("templates", "layout.html"),
+		filepath.Join("templates", "game.html"),
+		filepath.Join("templates", "player.html"),
+		filepath.Join("templates", "battleground.html"),
+		filepath.Join("templates", "warzone.html"),
+	))
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		tmpl.ExecuteTemplate(w, "layout", game)
+	})
+}
+
 // Temporary global game instance
 var game *Game
 
 func SetupHandlers() {
 	game = NewGame()
-	http.Handle("/", u.RequireReadOnlyMethods(u.LogRequest(renderPage())))
-	http.Handle("/flip", u.RequireMethods(u.LogRequest(http.HandlerFunc(flip())), http.MethodPost))
+	http.Handle("/game", u.RequireReadOnlyMethods(u.LogRequest(handleGame())))
+	http.Handle("/flip", u.RequireMethods(u.LogRequest(http.HandlerFunc(renderFlip())), http.MethodPost))
 }
