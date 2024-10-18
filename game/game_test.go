@@ -121,55 +121,87 @@ func TestNewDeck(t *testing.T) {
 		Card{Suit: "S", Value: Ace},
 	}
 
-	assert.Equal(t, expected, newDeck())
+	assert.Equal(t, expected, NewDeck())
 }
 
 func TestCutDeck(t *testing.T) {
 	testCases := []struct {
-		scenario string
-		deck     Deck
-		expected struct {
-			left  Deck
-			right Deck
-		}
+		scenario      string
+		deck          Deck
+		expectedLeft  Deck
+		expectedRight Deck
 	}{
 		{
 			"empty deck",
 			Deck{},
-			struct {
-				left  Deck
-				right Deck
-			}{Deck{}, Deck{}},
+			Deck{},
+			Deck{},
 		},
 		{
 			"one card",
 			Deck{Card{"C", 2}},
-			struct {
-				left  Deck
-				right Deck
-			}{
-				Deck{Card{"C", 2}},
-				Deck{},
-			},
+			Deck{},
+			Deck{Card{"C", 2}},
 		},
 		{
 			"two cards",
 			Deck{Card{"C", 2}, Card{"H", 2}},
-			struct {
-				left  Deck
-				right Deck
-			}{
-				Deck{Card{"C", 2}},
-				Deck{Card{"H", 2}},
-			},
+			Deck{Card{"H", 2}},
+			Deck{Card{"C", 2}},
 		},
 	}
 
 	for _, c := range testCases {
 		t.Run(c.scenario, func(t *testing.T) {
-			left, right := cutDeck(c.deck)
-			assert.Equal(t, c.expected.left, left)
-			assert.Equal(t, c.expected.right, right)
+			left, right := c.deck.Cut()
+			assert.Equal(t, c.expectedLeft, left)
+			assert.Equal(t, c.expectedRight, right)
+		})
+	}
+}
+
+func TestShuffle(t *testing.T) {
+	testCases := []struct {
+		scenario string
+		deck     Deck
+		expected Deck
+	}{
+		{
+			scenario: "empty deck",
+			deck:     Deck{},
+			expected: Deck{},
+		},
+		{
+			scenario: "one card",
+			deck:     Deck{Card{"C", 2}},
+			expected: Deck{Card{"C", 2}},
+		},
+		{
+			scenario: "five cards",
+			deck: Deck{
+				Card{"C", 2},
+				Card{"D", 2},
+				Card{"H", 2},
+				Card{"S", 2},
+				Card{"S", Ace},
+			},
+			expected: Deck{
+				Card{"H", 2},
+				Card{"C", 2},
+				Card{"S", 2},
+				Card{"D", 2},
+				Card{"S", Ace},
+			},
+		},
+	}
+
+	nonRandom := func() float32 { return 0.0 }
+	s := RiffleShuffler{random: nonRandom}
+
+	for _, c := range testCases {
+		t.Run(c.scenario, func(t *testing.T) {
+			c.deck.shuffle(s)
+			assert.Equal(t, c.expected, c.deck)
 		})
 	}
 }
