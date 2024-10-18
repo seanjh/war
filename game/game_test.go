@@ -153,7 +153,7 @@ func TestCutDeck(t *testing.T) {
 
 	for _, c := range testCases {
 		t.Run(c.scenario, func(t *testing.T) {
-			left, right := c.deck.cut()
+			left, right := c.deck.Cut()
 			assert.Equal(t, c.expectedLeft, left)
 			assert.Equal(t, c.expectedRight, right)
 		})
