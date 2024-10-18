@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"html/template"
 	"log"
-	"math/rand/v2"
 	"net/http"
 	"path/filepath"
 
@@ -158,24 +157,30 @@ func riffleShuffle(d Deck, rounds int) Deck {
 		r[i] = Card{c.Suit, c.Value}
 	}
 
-	for i := 0; i < rounds; i++ {
-		left, right := cutDeck(r)
-		log.Printf("Cut deck into 2 packages. left=%d, right=%d", len(left), len(right))
+	left, right := d.Cut()
+	li := 0
+	ri := 0
 
-		leftI := 0
-		rightI := 0
-		for j := 0; j < len(left)+len(right); j++ {
-			// interleave cards randomly from each cut
-			if rand.IntN(1) == 1 {
-				r[j] = right[rightI]
-				rightI++
-			} else {
-				r[j] = left[leftI]
-				leftI++
-			}
+	for i := 0; i < len(left)+len(right); i++ {
+		leftRemain := li < len(left)
+		rightRemain := ri < len(right)
+		leftPreferred := s.random() < 0.5
+
+		if leftRemain && !rightRemain {
+			r = append(r, left[li])
+			li++
+		} else if rightRemain && !leftRemain {
+			r = append(r, right[ri])
+			ri++
+		} else if leftPreferred {
+			r = append(r, left[li])
+			li++
+		} else {
+			r = append(r, right[ri])
+			ri++
 		}
-		log.Printf("Finished riffle shuffle round #%d", i+1)
 	}
+	log.Printf("Finished riffle shuffle for deck: %d", len(r))
 	return r
 }
 
@@ -198,7 +203,7 @@ func newGame() *Game {
 	}
 }
 
-func renderPage() http.Handler {
+func handleGame() http.Handler {
 	tmpl := template.Must(template.ParseFiles(
 		filepath.Join("templates", "layout.html"),
 		filepath.Join("templates", "game.html"),
@@ -225,6 +230,6 @@ func flip() func(http.ResponseWriter, *http.Request) {
 
 func SetupHandlers() {
 	game = newGame()
-	http.Handle("/", u.RequireReadOnlyMethods(u.LogRequest(renderPage())))
+	http.Handle("/", u.RequireReadOnlyMethods(u.LogRequest(handleGame())))
 	http.Handle("/flip", u.RequireMethods(u.LogRequest(http.HandlerFunc(flip())), http.MethodPost))
 }
