@@ -148,32 +148,38 @@ func NewRiffleShuffler() *RiffleShuffler {
 // [Riffle shuffle permutation]: https://en.wikipedia.org/wiki/Riffle_shuffle_permutation
 func (s RiffleShuffler) Shuffle(d Deck) Deck {
 	log.Printf("Starting riffle shuffle for deck: %d", len(d))
-	result := make(Deck, 0)
+	r := make(Deck, 0)
 
 	left, right := d.Cut()
+	li := 0
+	ri := 0
 
-	leftI := 0
-	rightI := 0
 	for i := 0; i < len(left)+len(right); i++ {
-		shuffleFromLeft := s.random() < 0.5
-		if shuffleFromLeft && leftI < len(left) {
-			result = append(result, left[leftI])
-			leftI++
-		} else if rightI < len(right) {
-			result = append(result, right[rightI])
-			rightI++
+		leftRemain := li < len(left)
+		rightRemain := ri < len(right)
+		leftPreferred := s.random() < 0.5
+
+		if leftRemain && !rightRemain {
+			r = append(r, left[li])
+			li++
+		} else if rightRemain && !leftRemain {
+			r = append(r, right[ri])
+			ri++
+		} else if leftPreferred {
+			r = append(r, left[li])
+			li++
 		} else {
-			log.Printf("Cannot take left (len: %d) or right (len: %d): %d", len(left), len(right), i)
-			break
+			r = append(r, right[ri])
+			ri++
 		}
 	}
 	log.Printf("Finished riffle shuffle for deck: %d", len(d))
-	return result
+	return r
 }
 
-// "It takes just seven ordinary, imperfect shuffles to mix a deck of cards thoroughly,
-// researchers have found. Fewer are not enough and more do not significantly improve
-// the mixing." via [In Shuffling Cards, 7 Is Winning Number]
+// It takes just seven ordinary, imperfect shuffles to mix a deck of cards
+// thoroughly, researchers have found. Fewer are not enough and more do not
+// significantly improve the mixing.
 //
 // [In Shuffling Cards, 7 Is Winning Number]: https://www.nytimes.com/1990/01/09/science/in-shuffling-cards-7-is-winning-number.html
 const defaultShuffleRounds = 7
@@ -221,10 +227,6 @@ func NewGame() *Game {
 	}
 }
 
-func renderFullPage(name string, filenames ...string) http.Handler {
-	tmpl := template.Must(template.ParseFiles(filenames))
-}
-
 func handleGame() http.Handler {
 	tmpl := template.Must(template.ParseFiles(
 		filepath.Join("templates", "layout.html"),
@@ -268,6 +270,6 @@ var game *Game
 
 func SetupHandlers() {
 	game = NewGame()
-	http.Handle("/game", u.RequireReadOnlyMethods(u.LogRequest(handleGame())))
+	http.Handle("/game", u.RequireReadOnlyMethods(u.LogRequest(http.HandlerFunc(renderHome()))))
 	http.Handle("/flip", u.RequireMethods(u.LogRequest(http.HandlerFunc(renderFlip())), http.MethodPost))
 }
