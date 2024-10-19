@@ -28,6 +28,7 @@
             go
             gotools
             air
+            gh
 
             nodejs_20
             pnpm_8
