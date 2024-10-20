@@ -7,7 +7,7 @@ import (
 	"net/http"
 
 	"github.com/seanjh/war/game"
-	"github.com/seanjh/war/utilhttp"
+	u "github.com/seanjh/war/utilhttp"
 )
 
 var portFlag = flag.Int("port", 3000, "Listen port number")
@@ -24,9 +24,9 @@ func ping(w http.ResponseWriter, r *http.Request) {
 func main() {
 	flag.Parse()
 
-	fs := utilhttp.RequireReadOnlyMethods(utilhttp.LogRequest(http.FileServer(http.Dir("./assets"))))
-	http.Handle("/assets/", http.StripPrefix("/assets/", fs))
-	http.Handle("/ping", utilhttp.LogRequest(utilhttp.RequireReadOnlyMethods(http.HandlerFunc(ping))))
+	fs := u.LogRequest(http.FileServer(http.Dir("./assets")))
+	http.Handle("GET /assets/", http.StripPrefix("/assets/", fs))
+	http.Handle("GET /ping", u.LogRequest(http.HandlerFunc(ping)))
 	game.SetupHandlers()
 
 	log.Printf("Starting server at %s:%d\n", *hostFlag, *portFlag)
