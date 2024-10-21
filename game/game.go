@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"path/filepath"
 
+	"github.com/seanjh/war/context"
+	"github.com/seanjh/war/session"
 	u "github.com/seanjh/war/utilhttp"
 )
 
@@ -47,23 +49,24 @@ func NewGame() *Game {
 	}
 }
 
-func renderFlip() http.Handler {
+func CreateFlip() http.HandlerFunc {
 	tmpl := template.Must(template.ParseFiles(
 		filepath.Join("templates", "game.html"),
 		filepath.Join("templates", "player.html"),
 		filepath.Join("templates", "battleground.html"),
 		filepath.Join("templates", "warzone.html"),
 	))
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
 		game, ok := mustHaveGame(w, "1")
 		if !ok {
+			http.Error(w, fmt.Sprintf("Cannot locate game: %s", "1"), http.StatusBadRequest)
 			return
 		}
 		tmpl.ExecuteTemplate(w, "game", game)
-	})
+	}
 }
 
-func LoadGame(id string) (*Game, error) {
+func Load(id string) (*Game, error) {
 	game, ok := games[id]
 	if !ok {
 		return nil, fmt.Errorf("Game not found: %s", id)
@@ -72,9 +75,8 @@ func LoadGame(id string) (*Game, error) {
 }
 
 func mustHaveGame(w http.ResponseWriter, id string) (*Game, bool) {
-	game, err := LoadGame("1")
+	game, err := Load(id)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
 		return &Game{}, false
 	}
 	return game, true
@@ -90,46 +92,55 @@ func loadGameTemplates() *template.Template {
 	))
 }
 
-func createGame() http.Handler {
+func CreateGame() context.HandlerFuncWithContext {
 	tmpl := loadGameTemplates()
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request, ctx *context.AppContext) {
 		game := NewGame()
 		games[game.Id] = game
+
+		s, err := session.NewSession()
+		if err != nil {
+			http.Error(w, "Failed to create session", http.StatusInternalServerError)
+		}
+
+		http.SetCookie(w, s.Cookie())
+
 		log.Printf("Created new game: %s", game.Id)
 		w.Header().Add("hx-push-url", fmt.Sprintf("/game/%s", game.Id))
 		tmpl.ExecuteTemplate(w, "layout", game)
-	})
+	}
 }
 
-func renderGame() http.Handler {
+func GetGame() http.HandlerFunc {
 	tmpl := loadGameTemplates()
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		game, ok := mustHaveGame(w, "1")
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+		game, ok := mustHaveGame(w, id)
 		if !ok {
+			http.Error(w, fmt.Sprintf("Cannot locate game: %s", id), http.StatusBadRequest)
 			return
 		}
 		tmpl.ExecuteTemplate(w, "layout", game)
-	})
+	}
 }
 
-func renderHome() http.Handler {
+func GetHome() http.HandlerFunc {
 	tmpl := template.Must(template.ParseFiles(
 		filepath.Join("templates", "layout.html"),
 		filepath.Join("templates", "home.html"),
 	))
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
 		tmpl.ExecuteTemplate(w, "layout", nil)
-	})
+	}
 }
 
 // Temporary global game instances
 var games map[string]*Game
 
-func SetupHandlers() {
+func SetupHandlers(ctx *context.AppContext) {
 	games = make(map[string]*Game)
-	http.Handle("GET /", u.LogRequest(renderHome()))
-	http.Handle("GET /lobby", u.LogRequest(renderHome()))
-	http.Handle("POST /game", u.LogRequest(createGame()))
-	http.Handle("GET /game", u.LogRequest(renderGame()))
-	http.Handle("POST /flip", u.LogRequest(renderFlip()))
+	http.HandleFunc("GET /", u.LogRequest(GetHome()))
+	http.HandleFunc("POST /game", u.LogRequest(ctx.WithContext(CreateGame())))
+	http.HandleFunc("GET /game/{id}", u.LogRequest(GetGame()))
+	http.HandleFunc("POST /flip", u.LogRequest(CreateFlip()))
 }
