@@ -11,7 +11,7 @@ type Session struct {
 	Id string
 }
 
-const sessionIdNumBytes = 32
+const sessionIdNumBytes = 64
 
 // Create a new Session with a random Id.
 func NewSession() (*Session, error) {
@@ -29,5 +29,13 @@ func NewSession() (*Session, error) {
 }
 
 func (s Session) Cookie() *http.Cookie {
-	return &http.Cookie{Name: "session", Value: s.Id}
+	// NOTE(sean): switch to gorillatoolkit.org/pkg/securecookie
+	return &http.Cookie{
+		Name:     "session-id",
+		Value:    s.Id,
+		Path:     "/",
+		SameSite: http.SameSiteStrictMode,
+		HttpOnly: true,
+		Secure:   true,
+	}
 }
