@@ -1,0 +1,13 @@
+CREATE TABLE games (
+    id INTEGER PRIMARY KEY,
+    code TEXT NOT NULL
+);
+
+CREATE TABLE game_sessions (
+    game_id INTEGER NOT NULL,
+    session_id INTEGER NOT NULL,
+    role TEXT,
+    FOREIGN KEY (game_id) REFERENCES games(id),
+    FOREIGN KEY (session_id) REFERENCES sessions(id),
+    PRIMARY KEY (game_id, session_id)
+);

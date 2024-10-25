@@ -29,10 +29,16 @@
             gotools
             air
             gh
+            sqlc
 
             nodejs_20
             pnpm_8
           ];
+
+          shellHook = ''
+            echo 'Installing sqlc completion'
+            source <(sqlc completion bash)
+          '';
         };
       });
     };

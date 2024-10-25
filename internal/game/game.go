@@ -3,13 +3,11 @@ package game
 import (
 	"fmt"
 	"html/template"
-	"log"
 	"net/http"
 	"path/filepath"
 
-	"github.com/seanjh/war/context"
-	"github.com/seanjh/war/session"
-	u "github.com/seanjh/war/utilhttp"
+	"github.com/seanjh/war/internal/appcontext"
+	"github.com/seanjh/war/internal/session"
 )
 
 type Player struct {
@@ -92,26 +90,43 @@ func loadGameTemplates() *template.Template {
 	))
 }
 
-func CreateGame() context.HandlerFuncWithContext {
+func CreateAndRenderGame() http.HandlerFunc {
 	tmpl := loadGameTemplates()
-	return func(w http.ResponseWriter, r *http.Request, ctx *context.AppContext) {
+	return func(w http.ResponseWriter, r *http.Request) {
 		game := NewGame()
 		games[game.Id] = game
 
-		s, err := session.NewSession()
+		ctx := appcontext.GetAppContext(r)
+		sess, created, err := session.GetOrCreate(r)
 		if err != nil {
-			http.Error(w, "Failed to create session", http.StatusInternalServerError)
+			ctx.Logger.Info("Failed to load session",
+				"err", err,
+			)
+			http.Error(w, "Failed to create new game", http.StatusInternalServerError)
+			return
 		}
 
-		http.SetCookie(w, s.Cookie())
+		if created {
+			ctx.Logger.Info("Created new session",
+				"sessionId", sess.Id,
+			)
+			http.SetCookie(w, sess.Cookie())
+		} else {
+			// TODO(sean) assign game to session
+			ctx.Logger.Info("Assigning new game to session",
+				"sessionId", sess.Id,
+			)
+		}
 
-		log.Printf("Created new game: %s", game.Id)
+		ctx.Logger.Info("Created new game",
+			"gameId", game.Id,
+		)
 		w.Header().Add("hx-push-url", fmt.Sprintf("/game/%s", game.Id))
 		tmpl.ExecuteTemplate(w, "layout", game)
 	}
 }
 
-func GetGame() http.HandlerFunc {
+func RenderGame() http.HandlerFunc {
 	tmpl := loadGameTemplates()
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("id")
@@ -124,7 +139,7 @@ func GetGame() http.HandlerFunc {
 	}
 }
 
-func GetHome() http.HandlerFunc {
+func RenderHome() http.HandlerFunc {
 	tmpl := template.Must(template.ParseFiles(
 		filepath.Join("templates", "layout.html"),
 		filepath.Join("templates", "home.html"),
@@ -134,13 +149,16 @@ func GetHome() http.HandlerFunc {
 	}
 }
 
+// TODO(sean) remove this global state
 // Temporary global game instances
 var games map[string]*Game
 
-func SetupHandlers(ctx *context.AppContext) {
+func SetupRoutes(mux *http.ServeMux) {
+	// TODO(sean) remove this global state
 	games = make(map[string]*Game)
-	http.HandleFunc("GET /", u.LogRequest(GetHome()))
-	http.HandleFunc("POST /game", u.LogRequest(ctx.WithContext(CreateGame())))
-	http.HandleFunc("GET /game/{id}", u.LogRequest(GetGame()))
-	http.HandleFunc("POST /flip", u.LogRequest(CreateFlip()))
+
+	mux.HandleFunc("GET /", RenderHome())
+	mux.HandleFunc("POST /game", CreateAndRenderGame())
+	mux.HandleFunc("GET /game/{id}", RenderGame())
+	mux.HandleFunc("POST /flip", CreateFlip())
 }

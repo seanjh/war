@@ -7,7 +7,7 @@ check:
 .PHONY: check
 
 test:
-	go test -v ./...
+	go test ./...
 .PHONY: test
 
 start:
@@ -15,7 +15,7 @@ start:
 .PHONY: start
 
 build:
-	go build -o ./tmp/server ./cmd/server.go
+	go build -o ./bin/server ./cmd/server/main.go
 .PHONY: build
 
 start-server:

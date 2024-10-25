@@ -1,0 +1,16 @@
+version: "2"
+sql:
+    - engine: "sqlite"
+      queries: "./internal/session/db/query.sql"
+      schema: "./internal/session/db/schema.sql"
+      gen:
+          go:
+              package: "db"
+              out: "./internal/session/db"
+    - engine: "sqlite"
+      queries: "./internal/game/db/query.sql"
+      schema: "./internal/game/db/schema.sql"
+      gen:
+          go:
+              package: "db"
+              out: "./internal/game/db"
