@@ -7,3 +7,6 @@ ORDER BY s.session_id;
 
 -- name: CreateGameSession :exec
 INSERT INTO game_sessions (game_id, session_id, role) VALUES (?, ?, ?) RETURNING game_id, session_id, role;
+
+-- name: CreateGame :exec
+INSERT INTO games (code) VALUES (?) RETURNING id, code;

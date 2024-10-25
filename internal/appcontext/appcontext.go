@@ -8,8 +8,9 @@ import (
 )
 
 type AppContext struct {
-	Logger *slog.Logger
-	DB     *sql.DB
+	Logger  *slog.Logger
+	ReadDB  *sql.DB
+	WriteDB *sql.DB
 }
 
 type key int

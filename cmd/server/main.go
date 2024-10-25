@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"runtime"
 
 	_ "github.com/mattn/go-sqlite3"
 
@@ -30,17 +31,29 @@ func ping(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+const connectionUrl = "file::memory:?cache=shared&_fk=true&_busy_timeout=5000&_sync=1&_cache_size=1000000000&_journal=WAL&_txlock=immediate"
+
 func main() {
 	flag.Parse()
 
-	logger := slog.New(slog.NewJSONHandler(os.Stderr, nil))
-	db, err := sql.Open("sqlite3", ":memory:")
+	readDB, err := sql.Open("sqlite3", connectionUrl)
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
+	readDB.SetMaxOpenConns(max(4, runtime.NumCPU()))
+
+	writeDB, err := sql.Open("sqlite3", connectionUrl)
+	if err != nil {
+		log.Fatal(err)
+	}
+	writeDB.SetMaxOpenConns(1)
+
+	logger := slog.New(slog.NewJSONHandler(os.Stderr, nil))
+
 	ctx := &appcontext.AppContext{
-		Logger: logger,
-		DB:     db,
+		Logger:  logger,
+		ReadDB:  readDB,
+		WriteDB: writeDB,
 	}
 
 	mux := http.NewServeMux()

@@ -1,4 +1,4 @@
 CREATE TABLE sessions (
     id INTEGER PRIMARY KEY,
-    created INT NOT NULL
-);
+    created TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+) STRICT;

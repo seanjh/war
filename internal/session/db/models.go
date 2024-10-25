@@ -6,5 +6,5 @@ package db
 
 type Session struct {
 	ID      int64
-	Created int64
+	Created string
 }

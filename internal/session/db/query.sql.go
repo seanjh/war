@@ -10,16 +10,11 @@ import (
 )
 
 const createSession = `-- name: CreateSession :one
-INSERT INTO sessions (id, created) VALUES (?, ?) RETURNING id, created
+INSERT INTO sessions (id) VALUES (NULL) RETURNING id, created
 `
 
-type CreateSessionParams struct {
-	ID      int64
-	Created int64
-}
-
-func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (Session, error) {
-	row := q.db.QueryRowContext(ctx, createSession, arg.ID, arg.Created)
+func (q *Queries) CreateSession(ctx context.Context) (Session, error) {
+	row := q.db.QueryRowContext(ctx, createSession)
 	var i Session
 	err := row.Scan(&i.ID, &i.Created)
 	return i, err

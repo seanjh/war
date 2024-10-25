@@ -9,12 +9,14 @@ import (
 )
 
 type Game struct {
-	ID   int64
-	Code string
+	ID      int64
+	Code    string
+	Created string
 }
 
 type GameSession struct {
 	GameID    int64
 	SessionID int64
 	Role      sql.NullString
+	Created   interface{}
 }

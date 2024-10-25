@@ -18,6 +18,10 @@ build:
 	go build -o ./bin/server ./cmd/server/main.go
 .PHONY: build
 
+generate-sql:
+	sqlc generate
+.PHONY: generate-sql
+
 start-server:
 	air -c .air.toml
 .PHONY: start-server

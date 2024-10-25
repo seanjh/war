@@ -10,6 +10,15 @@ import (
 	"database/sql"
 )
 
+const createGame = `-- name: CreateGame :exec
+INSERT INTO games (code) VALUES (?) RETURNING id, code
+`
+
+func (q *Queries) CreateGame(ctx context.Context, code string) error {
+	_, err := q.db.ExecContext(ctx, createGame, code)
+	return err
+}
+
 const createGameSession = `-- name: CreateGameSession :exec
 INSERT INTO game_sessions (game_id, session_id, role) VALUES (?, ?, ?) RETURNING game_id, session_id, role
 `
