@@ -18,9 +18,13 @@ build:
 	go build -o ./bin/server ./cmd/server/main.go
 .PHONY: build
 
-generate-sql:
+sql-generate:
 	sqlc generate
 .PHONY: generate-sql
+
+sql-migrate:
+	migrate -database sqlite3://./tmp/war.db -path ./internal/db/migrations up
+.PHONY: sql-migrate
 
 start-server:
 	air -c .air.toml

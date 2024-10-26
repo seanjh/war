@@ -24,12 +24,14 @@
         default = pkgs.mkShell {
           packages = with pkgs; [
             gnumake
+            gh
 
             go
             gotools
             air
-            gh
             sqlc
+            go-migrate
+            sqlite
 
             nodejs_20
             pnpm_8

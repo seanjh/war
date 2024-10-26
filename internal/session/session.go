@@ -1,59 +1,50 @@
 package session
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/http"
+
+	"github.com/seanjh/war/internal/appcontext"
+	"github.com/seanjh/war/internal/db"
 )
 
 type Session struct {
-	Id string
+	ID string
 }
 
 const sessionIdNumBytes = 64
-
-// Create a new Session with a random Id.
-func NewSession() (*Session, error) {
-	sess := &Session{}
-
-	b := make([]byte, sessionIdNumBytes)
-	_, err := rand.Read(b)
-	if err != nil {
-		return sess, fmt.Errorf("failed to generate a new session ID: %w", err)
-	}
-
-	sess.Id = hex.EncodeToString(b)
-
-	return sess, nil
-}
 
 const cookieName = "session-id"
 
 // GetOrCreate returns the session from the request, or generates a new session when none
 // is present.
-func GetOrCreate(r *http.Request) (*Session, bool, error) {
+func GetOrCreate(w http.ResponseWriter, r *http.Request) (*Session, error) {
 	id, err := r.Cookie(cookieName)
 	if err == nil {
-		return &Session{Id: id.Value}, false, nil
+		return &Session{ID: id.Value}, nil
 	}
 	if !errors.Is(err, http.ErrNoCookie) {
-		return nil, false, fmt.Errorf("failed to get the request session: %w", err)
+		return nil, fmt.Errorf("failed to get the request session: %w", err)
 	}
 
-	sess, err := NewSession()
+	ctx := appcontext.GetAppContext(r)
+	q := db.New(ctx.WriteDB)
+	dbSess, err := q.CreateSession(r.Context())
 	if err != nil {
-		return sess, false, fmt.Errorf("failed to create a new session: %w", err)
+		return nil, fmt.Errorf("failed to create a new session: %w", err)
 	}
-	return sess, true, nil
+
+	sess := &Session{ID: dbSess.ID}
+	http.SetCookie(w, sess.cookie())
+	return sess, nil
 }
 
-func (s Session) Cookie() *http.Cookie {
-	// NOTE(sean): switch to gorillatoolkit.org/pkg/securecookie
+func (s Session) cookie() *http.Cookie {
+	// NOTE(sean): maybe switch to gorillatoolkit.org/pkg/securecookie
 	return &http.Cookie{
 		Name:     cookieName,
-		Value:    s.Id,
+		Value:    s.ID,
 		Path:     "/",
 		SameSite: http.SameSiteStrictMode,
 		HttpOnly: true,

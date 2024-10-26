@@ -1,3 +1,10 @@
+-- name: GetSession :one
+SELECT id, created FROM sessions
+WHERE id = ? LIMIT 1;
+
+-- name: CreateSession :one
+INSERT INTO sessions (id) VALUES (NULL) RETURNING id, created;
+
 -- name: GetGameSession :many
 SELECT s.game_id, s.session_id, g.code
 FROM game_sessions s

@@ -97,7 +97,7 @@ func CreateAndRenderGame() http.HandlerFunc {
 		games[game.Id] = game
 
 		ctx := appcontext.GetAppContext(r)
-		sess, created, err := session.GetOrCreate(r)
+		sess, err := session.GetOrCreate(w, r, ctx)
 		if err != nil {
 			ctx.Logger.Info("Failed to load session",
 				"err", err,
@@ -106,18 +106,9 @@ func CreateAndRenderGame() http.HandlerFunc {
 			return
 		}
 
-		if created {
-			ctx.Logger.Info("Created new session",
-				"sessionId", sess.Id,
-			)
-			http.SetCookie(w, sess.Cookie())
-		} else {
-			// TODO(sean) assign game to session
-			ctx.Logger.Info("Assigning new game to session",
-				"sessionId", sess.Id,
-			)
-		}
-
+		ctx.Logger.Info("Assigning new game to session",
+			"sessionId", sess.Id,
+		)
 		ctx.Logger.Info("Created new game",
 			"gameId", game.Id,
 		)
@@ -153,7 +144,7 @@ func RenderHome() http.HandlerFunc {
 // Temporary global game instances
 var games map[string]*Game
 
-func SetupRoutes(mux *http.ServeMux) {
+func SetupRoutes(mux *http.ServeMux) *http.ServeMux {
 	// TODO(sean) remove this global state
 	games = make(map[string]*Game)
 
@@ -161,4 +152,6 @@ func SetupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /game", CreateAndRenderGame())
 	mux.HandleFunc("GET /game/{id}", RenderGame())
 	mux.HandleFunc("POST /flip", CreateFlip())
+
+	return mux
 }

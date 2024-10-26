@@ -2,15 +2,16 @@ package appcontext
 
 import (
 	"context"
-	"database/sql"
 	"log/slog"
 	"net/http"
+
+	"github.com/seanjh/war/internal/db"
 )
 
 type AppContext struct {
-	Logger  *slog.Logger
-	ReadDB  *sql.DB
-	WriteDB *sql.DB
+	Logger     *slog.Logger
+	ReadQuery  *db.Queries
+	WriteQuery *db.Queries
 }
 
 type key int
