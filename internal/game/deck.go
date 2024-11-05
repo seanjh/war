@@ -90,7 +90,7 @@ func (c Card) Name() string {
 }
 
 func (c Card) Slug() string {
-	return fmt.Sprintf("%s%s", c.Value.Slug(), c.Suit)
+	return fmt.Sprintf("%d%s", c.Value.Slug(), c.Suit)
 }
 
 type Deck []Card

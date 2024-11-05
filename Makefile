@@ -23,7 +23,11 @@ sql-generate:
 .PHONY: generate-sql
 
 sql-migrate:
-	migrate -database sqlite3://./tmp/war.db -path ./internal/db/migrations up
+	migrate -database sqlite3:///tmp/war.db -path ./internal/db/migrations up
+.PHONY: sql-migrate
+
+sql-migrate-down:
+	migrate -database sqlite3:///tmp/war.db -path ./internal/db/migrations down
 .PHONY: sql-migrate
 
 start-server:

@@ -8,6 +8,14 @@ import (
 	"database/sql"
 )
 
+type Deck struct {
+	GameID    int64
+	SessionID sql.NullString
+	Created   string
+	Cards     string
+	Size      sql.NullInt64
+}
+
 type Game struct {
 	ID      int64
 	Code    string
@@ -16,7 +24,12 @@ type Game struct {
 
 type GameSession struct {
 	GameID    int64
-	SessionID int64
-	Role      sql.NullString
-	Created   interface{}
+	SessionID string
+	Role      int64
+	Created   string
+}
+
+type Session struct {
+	ID      string
+	Created string
 }

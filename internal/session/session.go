@@ -1,21 +1,31 @@
 package session
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/http"
 
 	"github.com/seanjh/war/internal/appcontext"
-	"github.com/seanjh/war/internal/db"
 )
 
 type Session struct {
 	ID string
 }
 
-const sessionIdNumBytes = 64
+const sessionIdNumBytes = 16
 
 const cookieName = "session-id"
+
+func generateSessionID() (string, error) {
+	bytes := make([]byte, sessionIdNumBytes)
+	_, err := rand.Read(bytes)
+	if err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(bytes), nil
+}
 
 // GetOrCreate returns the session from the request, or generates a new session when none
 // is present.
@@ -28,9 +38,13 @@ func GetOrCreate(w http.ResponseWriter, r *http.Request) (*Session, error) {
 		return nil, fmt.Errorf("failed to get the request session: %w", err)
 	}
 
+	sessionId, err := generateSessionID()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create new session ID: %w", err)
+	}
+
 	ctx := appcontext.GetAppContext(r)
-	q := db.New(ctx.WriteDB)
-	dbSess, err := q.CreateSession(r.Context())
+	dbSess, err := ctx.DBWriter.Query.CreateSession(r.Context(), sessionId)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create a new session: %w", err)
 	}

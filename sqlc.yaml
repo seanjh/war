@@ -1,15 +1,8 @@
 version: "2"
 sql:
     - engine: "sqlite"
-      queries: "./internal/session/db/query.sql"
-      schema: "./internal/session/db/schema.sql"
-      gen:
-          go:
-              package: "db"
-              out: "./internal/db"
-    - engine: "sqlite"
-      queries: "./internal/game/db/query.sql"
-      schema: "./internal/game/db/schema.sql"
+      queries: "./internal/db/queries.sql"
+      schema: "./internal/db/migrations"
       gen:
           go:
               package: "db"

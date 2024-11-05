@@ -32,6 +32,7 @@
             sqlc
             go-migrate
             sqlite
+            litecli
 
             nodejs_20
             pnpm_8

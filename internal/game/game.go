@@ -7,19 +7,37 @@ import (
 	"path/filepath"
 
 	"github.com/seanjh/war/internal/appcontext"
+	"github.com/seanjh/war/internal/db"
 	"github.com/seanjh/war/internal/session"
 )
 
 type Player struct {
 	Deck Deck
 	Name string
-	Id   string
+	Role GameRole
 }
 
 // NewPlayer returns a new player.
 func NewPlayer(d Deck, id string, name string) *Player {
-	p := Player{Deck: d, Id: id, Name: name}
+	p := Player{Deck: d, ID: id, Name: name}
 	return &p
+}
+
+type GameRole int64
+
+const (
+	Host GameRole = iota + 1
+	Guest
+)
+
+func (r GameRole) String() string {
+	switch r {
+	case Host:
+		return "host"
+	case Guest:
+		return "guest"
+	}
+	return "unknown"
 }
 
 type Battle struct {
@@ -28,21 +46,43 @@ type Battle struct {
 }
 
 type Game struct {
-	Id      string
+	ID      int
 	Player1 *Player
 	Player2 *Player
 	Battle  *Battle
 }
 
 // NewGame returns a new Game with 2 Players with equal cuts of a new Deck.
-func NewGame() *Game {
+func NewGame(r *http.Request, sessionID string) (*Game, error) {
+	ctx := appcontext.GetAppContext(r)
+
+	tx, err := ctx.DBWriter.DB.Begin()
+	if err != nil {
+		return nil, fmt.Errorf("Failed to create new game: %w", err)
+	}
+
+	gameRow, err := ctx.DBWriter.Query.WithTx(tx).CreateGame(r.Context())
+	if err != nil {
+		_ = tx.Rollback()
+		return nil, fmt.Errorf("Failed to create new game: %w", err)
+	}
+	gameSess, err := ctx.DBWriter.Query.CreateGameSession(r.Context(), db.CreateGameSessionParams{
+		GameID:    gameRow.ID,
+		SessionID: sessionID,
+		Role:      int64(Host),
+	})
+	if err != nil {
+		_ = tx.Rollback()
+		return nil, fmt.Errorf("Failed to create new game session: %w", err)
+	}
+
 	deck := NewDeck()
 	deck.Shuffle(NewRiffleShuffler())
 	d1, d2 := deck.Cut()
 	return &Game{
-		Id:      "1",
+		ID:      int(gameRow.ID),
 		Player1: NewPlayer(d1, "1", "Player One"),
-		Player2: NewPlayer(d2, "2", "Player Two"),
+		Player2: &Player{},
 		Battle:  &Battle{},
 	}
 }
@@ -93,26 +133,27 @@ func loadGameTemplates() *template.Template {
 func CreateAndRenderGame() http.HandlerFunc {
 	tmpl := loadGameTemplates()
 	return func(w http.ResponseWriter, r *http.Request) {
-		game := NewGame()
-		games[game.Id] = game
+		games[game.ID] = game
 
 		ctx := appcontext.GetAppContext(r)
-		sess, err := session.GetOrCreate(w, r, ctx)
+		// TODO(sean) probably want a middleware to load session automatically
+		sess, err := session.GetOrCreate(w, r)
 		if err != nil {
 			ctx.Logger.Info("Failed to load session",
 				"err", err,
 			)
-			http.Error(w, "Failed to create new game", http.StatusInternalServerError)
+			http.Error(w, "Failed to create new session", http.StatusInternalServerError)
 			return
 		}
 
+		game := NewGame(r, sess.ID)
 		ctx.Logger.Info("Assigning new game to session",
-			"sessionId", sess.Id,
+			"sessionID", sess.ID,
 		)
 		ctx.Logger.Info("Created new game",
-			"gameId", game.Id,
+			"gameID", game.ID,
 		)
-		w.Header().Add("hx-push-url", fmt.Sprintf("/game/%s", game.Id))
+		w.Header().Add("hx-push-url", fmt.Sprintf("/game/%s", game.ID))
 		tmpl.ExecuteTemplate(w, "layout", game)
 	}
 }

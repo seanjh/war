@@ -2,21 +2,27 @@ package appcontext
 
 import (
 	"context"
+	"database/sql"
 	"log/slog"
 	"net/http"
 
 	"github.com/seanjh/war/internal/db"
 )
 
-type AppContext struct {
-	Logger     *slog.Logger
-	ReadQuery  *db.Queries
-	WriteQuery *db.Queries
+type AppContextDB struct {
+	Query *db.Queries
+	DB    *sql.DB
 }
 
-type key int
+type AppContext struct {
+	Logger   *slog.Logger
+	DBReader *AppContextDB
+	DBWriter *AppContextDB
+}
 
-const appContextKey key = 0
+type key string
+
+const appContextKey key = "appcontext"
 
 // Middleware adds the application context to the request context.
 func (c *AppContext) Middleware(next http.Handler) http.Handler {

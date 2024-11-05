@@ -4,7 +4,7 @@ tmp_dir = "tmp"
 
 [build]
   args_bin = []
-  bin = "./bin/server"
+  bin = "./bin/server -port=3000 -dsn='./tmp/war.db'"
   cmd = "make build"
   delay = 1000
   exclude_dir = ["assets", "client", "vendor", "testdata", "node_modules", "bin"]
