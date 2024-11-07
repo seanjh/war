@@ -1,10 +1,13 @@
 package game
 
 import (
+	"database/sql"
 	"fmt"
 	"html/template"
 	"net/http"
 	"path/filepath"
+	"strconv"
+	"strings"
 
 	"github.com/seanjh/war/internal/appcontext"
 	"github.com/seanjh/war/internal/db"
@@ -13,20 +16,14 @@ import (
 
 type Player struct {
 	Deck Deck
-	Name string
 	Role GameRole
-}
-
-// NewPlayer returns a new player.
-func NewPlayer(d Deck, id string, name string) *Player {
-	p := Player{Deck: d, ID: id, Name: name}
-	return &p
 }
 
 type GameRole int64
 
 const (
-	Host GameRole = iota + 1
+	Unknown GameRole = iota
+	Host
 	Guest
 )
 
@@ -38,6 +35,13 @@ func (r GameRole) String() string {
 		return "guest"
 	}
 	return "unknown"
+}
+
+func ConvertGameRole(val int64) GameRole {
+	if val > int64(Guest) {
+		return Unknown
+	}
+	return GameRole(val)
 }
 
 type Battle struct {
@@ -52,39 +56,50 @@ type Game struct {
 	Battle  *Battle
 }
 
-// NewGame returns a new Game with 2 Players with equal cuts of a new Deck.
-func NewGame(r *http.Request, sessionID string) (*Game, error) {
+// OpenNewGame returns a new Game with 2 Players with equal cuts of a new Deck.
+func OpenNewGame(r *http.Request, sessionID string) (*Game, error) {
 	ctx := appcontext.GetAppContext(r)
 
 	tx, err := ctx.DBWriter.DB.Begin()
+	defer tx.Rollback()
 	if err != nil {
 		return nil, fmt.Errorf("Failed to create new game: %w", err)
 	}
 
 	gameRow, err := ctx.DBWriter.Query.WithTx(tx).CreateGame(r.Context())
 	if err != nil {
-		_ = tx.Rollback()
 		return nil, fmt.Errorf("Failed to create new game: %w", err)
 	}
-	gameSess, err := ctx.DBWriter.Query.CreateGameSession(r.Context(), db.CreateGameSessionParams{
-		GameID:    gameRow.ID,
-		SessionID: sessionID,
-		Role:      int64(Host),
-	})
-	if err != nil {
-		_ = tx.Rollback()
-		return nil, fmt.Errorf("Failed to create new game session: %w", err)
-	}
+	ctx.Logger.Info("Created new game row",
+		"gameID", gameRow.ID,
+		"gameCode", gameRow.Code)
 
 	deck := NewDeck()
 	deck.Shuffle(NewRiffleShuffler())
 	d1, d2 := deck.Cut()
-	return &Game{
+
+	err = ctx.DBWriter.Query.WithTx(tx).CreateHostGameSession(r.Context(), db.CreateHostGameSessionParams{
+		GameID:    gameRow.ID,
+		GameID_2:  gameRow.ID,
+		Deck:      d1.String(),
+		Deck_2:    d2.String(),
+		SessionID: sql.NullString{String: sessionID, Valid: true},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("Failed to create new host game session: %w", err)
+	}
+	err = tx.Commit()
+	if err != nil {
+		return nil, fmt.Errorf("Failed to commit new host game session: %w", err)
+	}
+
+	game := &Game{
 		ID:      int(gameRow.ID),
-		Player1: NewPlayer(d1, "1", "Player One"),
-		Player2: &Player{},
+		Player1: &Player{Deck: d1, Role: Host},
+		Player2: &Player{Deck: d2, Role: Guest},
 		Battle:  &Battle{},
 	}
+	return game, nil
 }
 
 func CreateFlip() http.HandlerFunc {
@@ -112,12 +127,36 @@ func Load(id string) (*Game, error) {
 	return game, nil
 }
 
-func mustHaveGame(w http.ResponseWriter, id string) (*Game, bool) {
-	game, err := Load(id)
+// LoadGame returns a pre-existing Game when recognized.
+func LoadGame(id string, r *http.Request) (*Game, error) {
+	gameID, err := strconv.Atoi(id)
 	if err != nil {
-		return &Game{}, false
+		return nil, fmt.Errorf("Failed to convert gameID '%s' to int: %w", id, err)
 	}
-	return game, true
+
+	game := &Game{ID: gameID}
+
+	ctx := appcontext.GetAppContext(r)
+	sess := session.GetSession(r)
+	rows, err := ctx.DBReader.Query.GetGameSessions(r.Context(), int64(gameID))
+	if err != nil {
+		return nil, fmt.Errorf("Failed to load gameID '%d' from database: %w", gameID, err)
+	}
+	for _, row := range rows {
+		role := ConvertGameRole(row.Role)
+		deck := strings.Split(row.Deck, ",")
+		switch role {
+		case Host:
+			game.Player1 = &Player{Role: Host, Deck: Deck(deck)}
+		case Guest:
+			game.Player2 = &Player{Role: Guest, Deck: Deck(deck)}
+		default:
+			ctx.Logger.Error("Unsupported player role",
+				"sessionID", sess.ID,
+				"row", row)
+		}
+	}
+	return game, nil
 }
 
 func loadGameTemplates() *template.Template {
@@ -133,28 +172,40 @@ func loadGameTemplates() *template.Template {
 func CreateAndRenderGame() http.HandlerFunc {
 	tmpl := loadGameTemplates()
 	return func(w http.ResponseWriter, r *http.Request) {
-		games[game.ID] = game
-
 		ctx := appcontext.GetAppContext(r)
-		// TODO(sean) probably want a middleware to load session automatically
-		sess, err := session.GetOrCreate(w, r)
-		if err != nil {
-			ctx.Logger.Info("Failed to load session",
-				"err", err,
-			)
-			http.Error(w, "Failed to create new session", http.StatusInternalServerError)
-			return
+
+		// sessionID, err := session.OpenNewSession(w, r)
+		s := session.GetSession(r)
+		if s.ID == "" {
+			newSession, err := session.OpenNewSession(w, r)
+			s = newSession
+			if err != nil {
+				ctx.Logger.Info("Failed to open new session",
+					"err", err,
+				)
+				http.Error(w, "Failed to create new session", http.StatusInternalServerError)
+				return
+			}
 		}
 
-		game := NewGame(r, sess.ID)
-		ctx.Logger.Info("Assigning new game to session",
-			"sessionID", sess.ID,
-		)
-		ctx.Logger.Info("Created new game",
+		game, err := OpenNewGame(r, s.ID)
+		if err != nil {
+			ctx.Logger.Error("Failed to create new game", "err", err)
+			http.Error(w, "Failed to create new game", http.StatusInternalServerError)
+			return
+		}
+		ctx.Logger.Info("Created new game and host game session",
 			"gameID", game.ID,
 		)
-		w.Header().Add("hx-push-url", fmt.Sprintf("/game/%s", game.ID))
-		tmpl.ExecuteTemplate(w, "layout", game)
+		w.Header().Add("hx-push-url", fmt.Sprintf("/game/%d", game.ID))
+		if err := tmpl.ExecuteTemplate(w, "layout", game); err != nil {
+			ctx.Logger.Error("Failed to render game template",
+				"err", err,
+				"gameID", game.ID,
+				"sessionID", s.ID)
+			http.Error(w, "Failed to render game template", http.StatusInternalServerError)
+			return
+		}
 	}
 }
 
@@ -193,6 +244,7 @@ func SetupRoutes(mux *http.ServeMux) *http.ServeMux {
 	mux.HandleFunc("POST /game", CreateAndRenderGame())
 	mux.HandleFunc("GET /game/{id}", RenderGame())
 	mux.HandleFunc("POST /flip", CreateFlip())
+	session.WithSessionMiddleware(mux)
 
 	return mux
 }

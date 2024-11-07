@@ -26,7 +26,7 @@ var hostFlag = flag.String("host", "localhost", "Listen hostname")
 var dsnFlag = flag.String("dsn", "file::memory:", "SQLite data source name")
 var migrateFlag = flag.Bool("migrate", false, "Run the database migrations")
 
-const connParams = "cache=shared&_fk=true&_busy_timeout=5000&_sync=1&_cache_size=1000000000&_journal=WAL&_txlock=immediate"
+const connParams = "_fk=true&_busy_timeout=5000&_sync=1&_cache_size=1000000000&_journal=WAL&_txlock=immediate"
 
 func main() {
 	flag.Parse()

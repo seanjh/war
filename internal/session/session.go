@@ -1,6 +1,7 @@
 package session
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
@@ -14,9 +15,30 @@ type Session struct {
 	ID string
 }
 
-const sessionIdNumBytes = 16
-
 const cookieName = "session-id"
+
+func extractSessionID(r *http.Request) (string, error) {
+	id, err := r.Cookie(cookieName)
+	if err == nil {
+		return id.Value, nil
+	}
+	if !errors.Is(err, http.ErrNoCookie) {
+		return "", fmt.Errorf("failed to get the request session: %w", err)
+	}
+
+	return "", nil
+}
+
+func validateSessionId(sessionID string, r *http.Request) (*Session, error) {
+	ctx := appcontext.GetAppContext(r)
+	row, err := ctx.DBReader.Query.GetSession(r.Context(), sessionID)
+	if err != nil {
+		return nil, fmt.Errorf("session ID '%s' not recognized: %w", err)
+	}
+	return &Session{ID: row.ID}, nil
+}
+
+const sessionIdNumBytes = 16
 
 func generateSessionID() (string, error) {
 	bytes := make([]byte, sessionIdNumBytes)
@@ -29,39 +51,60 @@ func generateSessionID() (string, error) {
 
 // GetOrCreate returns the session from the request, or generates a new session when none
 // is present.
-func GetOrCreate(w http.ResponseWriter, r *http.Request) (*Session, error) {
-	id, err := r.Cookie(cookieName)
-	if err == nil {
-		return &Session{ID: id.Value}, nil
-	}
-	if !errors.Is(err, http.ErrNoCookie) {
-		return nil, fmt.Errorf("failed to get the request session: %w", err)
-	}
-
-	sessionId, err := generateSessionID()
+func OpenNewSession(w http.ResponseWriter, r *http.Request) (*Session, error) {
+	ctx := appcontext.GetAppContext(r)
+	sessionID, err := generateSessionID()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create new session ID: %w", err)
 	}
+	ctx.Logger.Info("Generated new random session ID",
+		"sessionID", sessionID)
 
-	ctx := appcontext.GetAppContext(r)
-	dbSess, err := ctx.DBWriter.Query.CreateSession(r.Context(), sessionId)
+	dbSess, err := ctx.DBWriter.Query.CreateSession(r.Context(), sessionID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create a new session: %w", err)
 	}
+	ctx.Logger.Info("Created new session",
+		"sessionId", dbSess.ID, "created", dbSess.Created)
 
-	sess := &Session{ID: dbSess.ID}
-	http.SetCookie(w, sess.cookie())
-	return sess, nil
+	http.SetCookie(w, cookie(dbSess.ID))
+	return &Session{ID: dbSess.ID}, nil
 }
 
-func (s Session) cookie() *http.Cookie {
+func cookie(sessionID string) *http.Cookie {
 	// NOTE(sean): maybe switch to gorillatoolkit.org/pkg/securecookie
 	return &http.Cookie{
 		Name:     cookieName,
-		Value:    s.ID,
+		Value:    sessionID,
 		Path:     "/",
 		SameSite: http.SameSiteStrictMode,
 		HttpOnly: true,
 		Secure:   true,
 	}
+}
+
+const sessionIDKey string = "sessionid"
+
+func WithSessionMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sessionID, err := extractSessionID(r)
+		if err != nil {
+			return
+		}
+		sess, err := validateSessionId(sessionID, r)
+		if err != nil {
+			return
+		}
+		ctx := context.WithValue(r.Context(), sessionIDKey, sess)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+func GetSession(r *http.Request) *Session {
+	sess := &Session{}
+	sessionID, ok := r.Context().Value(sessionIDKey).(string)
+	if ok {
+		sess.ID = sessionID
+	}
+	return sess
 }

@@ -10,23 +10,8 @@ import (
 	"database/sql"
 )
 
-const createDeck = `-- name: CreateDeck :exec
-INSERT INTO decks (game_id, session_id, cards) VALUES (?, ?, ?)
-`
-
-type CreateDeckParams struct {
-	GameID    int64
-	SessionID sql.NullString
-	Cards     string
-}
-
-func (q *Queries) CreateDeck(ctx context.Context, arg CreateDeckParams) error {
-	_, err := q.db.ExecContext(ctx, createDeck, arg.GameID, arg.SessionID, arg.Cards)
-	return err
-}
-
 const createGame = `-- name: CreateGame :one
-INSERT INTO games (id, code) VALUES (NULL, NULL) RETURNING id, code
+INSERT INTO games (id) VALUES (NULL) RETURNING id, code
 `
 
 type CreateGameRow struct {
@@ -41,27 +26,27 @@ func (q *Queries) CreateGame(ctx context.Context) (CreateGameRow, error) {
 	return i, err
 }
 
-const createGameSession = `-- name: CreateGameSession :one
-INSERT INTO game_sessions (game_id, session_id, role) VALUES (?, ?, ?) RETURNING game_id, session_id, role
+const createHostGameSession = `-- name: CreateHostGameSession :exec
+INSERT INTO game_sessions (game_id, session_id, role, deck) VALUES (?, ?, 1, ?), (?, NULL, 2, ?)
 `
 
-type CreateGameSessionParams struct {
+type CreateHostGameSessionParams struct {
 	GameID    int64
-	SessionID string
-	Role      int64
+	SessionID sql.NullString
+	Deck      string
+	GameID_2  int64
+	Deck_2    string
 }
 
-type CreateGameSessionRow struct {
-	GameID    int64
-	SessionID string
-	Role      int64
-}
-
-func (q *Queries) CreateGameSession(ctx context.Context, arg CreateGameSessionParams) (CreateGameSessionRow, error) {
-	row := q.db.QueryRowContext(ctx, createGameSession, arg.GameID, arg.SessionID, arg.Role)
-	var i CreateGameSessionRow
-	err := row.Scan(&i.GameID, &i.SessionID, &i.Role)
-	return i, err
+func (q *Queries) CreateHostGameSession(ctx context.Context, arg CreateHostGameSessionParams) error {
+	_, err := q.db.ExecContext(ctx, createHostGameSession,
+		arg.GameID,
+		arg.SessionID,
+		arg.Deck,
+		arg.GameID_2,
+		arg.Deck_2,
+	)
+	return err
 }
 
 const createSession = `-- name: CreateSession :one
@@ -92,30 +77,35 @@ func (q *Queries) GetGame(ctx context.Context, id int64) (GetGameRow, error) {
 	return i, err
 }
 
-const getGameSession = `-- name: GetGameSession :many
-SELECT s.game_id, s.session_id, g.code
-FROM game_sessions s
-INNER JOIN games g ON g.id = s.game_id
-WHERE s.game_id = ?
-ORDER BY s.session_id
+const getGameSessions = `-- name: GetGameSessions :many
+SELECT game_id, COALESCE(session_id, ''), role, deck
+FROM game_sessions
+WHERE game_id = ?
+ORDER BY role
 `
 
-type GetGameSessionRow struct {
+type GetGameSessionsRow struct {
 	GameID    int64
 	SessionID string
-	Code      string
+	Role      int64
+	Deck      string
 }
 
-func (q *Queries) GetGameSession(ctx context.Context, gameID int64) ([]GetGameSessionRow, error) {
-	rows, err := q.db.QueryContext(ctx, getGameSession, gameID)
+func (q *Queries) GetGameSessions(ctx context.Context, gameID int64) ([]GetGameSessionsRow, error) {
+	rows, err := q.db.QueryContext(ctx, getGameSessions, gameID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []GetGameSessionRow
+	var items []GetGameSessionsRow
 	for rows.Next() {
-		var i GetGameSessionRow
-		if err := rows.Scan(&i.GameID, &i.SessionID, &i.Code); err != nil {
+		var i GetGameSessionsRow
+		if err := rows.Scan(
+			&i.GameID,
+			&i.SessionID,
+			&i.Role,
+			&i.Deck,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

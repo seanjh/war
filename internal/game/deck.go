@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"math/rand/v2"
+	"strings"
 )
 
 type Suit string
@@ -119,6 +120,15 @@ func (d Deck) Cut() (Deck, Deck) {
 		}
 	}
 	return left, right
+}
+
+// Return the serialized Deck
+func (d Deck) String() string {
+	r := make([]string, len(d))
+	for i := 0; i < len(d); i++ {
+		r = append(r, d[i].Slug())
+	}
+	return strings.Join(r, ",")
 }
 
 type Shuffler interface {
