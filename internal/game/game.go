@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"path/filepath"
 	"strconv"
-	"strings"
 
 	"github.com/seanjh/war/internal/appcontext"
 	"github.com/seanjh/war/internal/db"
@@ -102,31 +101,6 @@ func OpenNewGame(r *http.Request, sessionID string) (*Game, error) {
 	return game, nil
 }
 
-func CreateFlip() http.HandlerFunc {
-	tmpl := template.Must(template.ParseFiles(
-		filepath.Join("templates", "game.html"),
-		filepath.Join("templates", "player.html"),
-		filepath.Join("templates", "battleground.html"),
-		filepath.Join("templates", "warzone.html"),
-	))
-	return func(w http.ResponseWriter, r *http.Request) {
-		game, ok := mustHaveGame(w, "1")
-		if !ok {
-			http.Error(w, fmt.Sprintf("Cannot locate game: %s", "1"), http.StatusBadRequest)
-			return
-		}
-		tmpl.ExecuteTemplate(w, "game", game)
-	}
-}
-
-func Load(id string) (*Game, error) {
-	game, ok := games[id]
-	if !ok {
-		return nil, fmt.Errorf("Game not found: %s", id)
-	}
-	return game, nil
-}
-
 // LoadGame returns a pre-existing Game when recognized.
 func LoadGame(id string, r *http.Request) (*Game, error) {
 	gameID, err := strconv.Atoi(id)
@@ -144,12 +118,13 @@ func LoadGame(id string, r *http.Request) (*Game, error) {
 	}
 	for _, row := range rows {
 		role := ConvertGameRole(row.Role)
-		deck := strings.Split(row.Deck, ",")
+		// TODO(sean) parse the deck
+		// deck := strings.Split(row.Deck, ",")
 		switch role {
 		case Host:
-			game.Player1 = &Player{Role: Host, Deck: Deck(deck)}
+			game.Player1 = &Player{Role: Host, Deck: NewDeck()}
 		case Guest:
-			game.Player2 = &Player{Role: Guest, Deck: Deck(deck)}
+			game.Player2 = &Player{Role: Guest, Deck: NewDeck()}
 		default:
 			ctx.Logger.Error("Unsupported player role",
 				"sessionID", sess.ID,
@@ -203,7 +178,7 @@ func CreateAndRenderGame() http.HandlerFunc {
 				"err", err,
 				"gameID", game.ID,
 				"sessionID", s.ID)
-			http.Error(w, "Failed to render game template", http.StatusInternalServerError)
+			http.Error(w, "Failed to render game", http.StatusInternalServerError)
 			return
 		}
 	}
@@ -213,12 +188,37 @@ func RenderGame() http.HandlerFunc {
 	tmpl := loadGameTemplates()
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("id")
-		game, ok := mustHaveGame(w, id)
-		if !ok {
-			http.Error(w, fmt.Sprintf("Cannot locate game: %s", id), http.StatusBadRequest)
+		game, err := LoadGame(id, r)
+		ctx := appcontext.GetAppContext(r)
+		s := session.GetSession(r)
+		if err != nil {
+			ctx.Logger.Error("Failed to load game",
+				"err", err,
+				"sessionID", s.ID,
+				"gameID", id)
+			http.Error(w, fmt.Sprintf("Cannot locate game '%s'", id), http.StatusBadRequest)
 			return
 		}
-		tmpl.ExecuteTemplate(w, "layout", game)
+		if tmpl.ExecuteTemplate(w, "layout", game) != nil {
+			ctx.Logger.Error("Failed to render game template",
+				"err", err,
+				"gameID", game.ID,
+				"sessionID", s.ID)
+			http.Error(w, "Failed to render game", http.StatusInternalServerError)
+			return
+		}
+	}
+}
+
+func CreateFlip() http.HandlerFunc {
+	// tmpl := template.Must(template.ParseFiles(
+	// 	filepath.Join("templates", "game.html"),
+	// 	filepath.Join("templates", "player.html"),
+	// 	filepath.Join("templates", "battleground.html"),
+	// 	filepath.Join("templates", "warzone.html"),
+	// ))
+	return func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "Not implemented", http.StatusInternalServerError)
 	}
 }
 
@@ -243,7 +243,7 @@ func SetupRoutes(mux *http.ServeMux) *http.ServeMux {
 	mux.HandleFunc("GET /", RenderHome())
 	mux.HandleFunc("POST /game", CreateAndRenderGame())
 	mux.HandleFunc("GET /game/{id}", RenderGame())
-	mux.HandleFunc("POST /flip", CreateFlip())
+	mux.HandleFunc("POST /game/{id}/flip", CreateFlip())
 	session.WithSessionMiddleware(mux)
 
 	return mux

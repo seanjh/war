@@ -317,3 +317,29 @@ func TestShuffle(t *testing.T) {
 		})
 	}
 }
+
+func TestDeckString(t *testing.T) {
+	testCases := []struct {
+		deck     Deck
+		expected string
+	}{
+		{
+			deck:     make([]Card, 0),
+			expected: "",
+		},
+		{
+			deck:     []Card{Card{SuitHeart, 2}},
+			expected: "2H",
+		},
+		{
+			deck:     []Card{Card{SuitHeart, 2}, Card{SuitDiamond, 2}},
+			expected: "2H,2D",
+		},
+	}
+
+	for _, c := range testCases {
+		t.Run("deck string", func(t *testing.T) {
+			assert.Equal(t, c.deck.String(), c.expected)
+		})
+	}
+}

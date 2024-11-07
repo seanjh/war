@@ -91,7 +91,7 @@ func (c Card) Name() string {
 }
 
 func (c Card) Slug() string {
-	return fmt.Sprintf("%d%s", c.Value.Slug(), c.Suit)
+	return fmt.Sprintf("%s%s", c.Value.Slug(), c.Suit)
 }
 
 type Deck []Card
@@ -125,8 +125,8 @@ func (d Deck) Cut() (Deck, Deck) {
 // Return the serialized Deck
 func (d Deck) String() string {
 	r := make([]string, len(d))
-	for i := 0; i < len(d); i++ {
-		r = append(r, d[i].Slug())
+	for i, card := range d {
+		r[i] = card.Slug()
 	}
 	return strings.Join(r, ",")
 }

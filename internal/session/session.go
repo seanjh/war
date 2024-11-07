@@ -33,7 +33,7 @@ func validateSessionId(sessionID string, r *http.Request) (*Session, error) {
 	ctx := appcontext.GetAppContext(r)
 	row, err := ctx.DBReader.Query.GetSession(r.Context(), sessionID)
 	if err != nil {
-		return nil, fmt.Errorf("session ID '%s' not recognized: %w", err)
+		return nil, fmt.Errorf("session ID '%s' not recognized: %w", sessionID, err)
 	}
 	return &Session{ID: row.ID}, nil
 }
