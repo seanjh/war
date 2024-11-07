@@ -24,14 +24,24 @@
         default = pkgs.mkShell {
           packages = with pkgs; [
             gnumake
+            gh
 
             go
             gotools
             air
+            sqlc
+            go-migrate
+            sqlite
+            litecli
 
             nodejs_20
             pnpm_8
           ];
+
+          shellHook = ''
+            echo 'Installing sqlc completion'
+            source <(sqlc completion bash)
+          '';
         };
       });
     };

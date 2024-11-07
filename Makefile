@@ -7,7 +7,7 @@ check:
 .PHONY: check
 
 test:
-	go test -v ./...
+	go test ./...
 .PHONY: test
 
 start:
@@ -15,8 +15,20 @@ start:
 .PHONY: start
 
 build:
-	go build -o ./tmp/server ./cmd/server.go
+	go build -o ./bin/server ./cmd/server/main.go
 .PHONY: build
+
+sql-generate:
+	sqlc generate
+.PHONY: generate-sql
+
+sql-migrate:
+	migrate -verbose -database=sqlite3://./tmp/war.db -source=file://./internal/db/migrations up
+.PHONY: sql-migrate
+
+sql-migrate-drop:
+	migrate -verbose -database=sqlite3://./tmp/war.db -source=file://./internal/db/migrations drop
+.PHONY: sql-migrate
 
 start-server:
 	air -c .air.toml
