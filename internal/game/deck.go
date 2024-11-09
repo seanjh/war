@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"math/rand/v2"
+	"strconv"
 	"strings"
 )
 
@@ -94,6 +95,30 @@ func (c Card) Slug() string {
 	return fmt.Sprintf("%s%s", c.Value.Slug(), c.Suit)
 }
 
+// ConvertCardSlug converts a card slug like "10C" or "AD" into the corresponding Card.
+func ConvertCardSlug(s string) (Card, error) {
+	suit := s[len(s)-1:]
+	rawValue := s[:len(s)-1]
+	var value FaceValue
+	switch rawValue {
+	case "A":
+		value = Ace
+	case "J":
+		value = Jack
+	case "Q":
+		value = Queen
+	case "K":
+		value = King
+	default:
+		val, err := strconv.Atoi(rawValue)
+		if err != nil {
+			return Card{}, fmt.Errorf("invalid card slug: %s", s)
+		}
+		value = FaceValue(val)
+	}
+	return Card{Suit: Suit(suit), Value: FaceValue(value)}, nil
+}
+
 type Deck []Card
 
 func NewDeck() Deck {
@@ -103,6 +128,24 @@ func NewDeck() Deck {
 		for v = 2; v <= Ace; v++ {
 			d = append(d, Card{Suit: s, Value: v})
 		}
+	}
+	return d
+}
+
+// ConvertDeck converts a comma-separated string of card slugs into a Deck.
+func ConvertDeck(s string) Deck {
+	slugs := strings.Split(s, ",")
+	d := make([]Card, 0)
+	for _, slug := range slugs {
+		if slug == "" {
+			continue
+		}
+		card, err := ConvertCardSlug(slug)
+		if err != nil {
+			log.Printf("invalid card slug: %s", slug)
+			continue
+		}
+		d = append(d, card)
 	}
 	return d
 }
@@ -135,6 +178,11 @@ type Shuffler interface {
 	Shuffle(Deck) Deck
 }
 
+// RiffleShuffler is a shuffler that uses a rough approximation of the "Riffle shuffle"
+// technique - where cards are cut into 2 smaller decks, and interleaved. See
+// [Riffle shuffle permutation] for details.
+//
+// [Riffle shuffle permutation]: https://en.wikipedia.org/wiki/Riffle_shuffle_permutation
 type RiffleShuffler struct {
 	// random returns a value in the range [0.0,1.0), which determines from
 	// which cut to pull the next card during a shuffle.
@@ -146,11 +194,6 @@ func NewRiffleShuffler() *RiffleShuffler {
 	return &s
 }
 
-// RiffleShuffler returns a copy of the deck using a rough approximation of the "Riffle shuffle"
-// technique - where cards are cut into 2 smaller decks, and interleaved. See
-// [Riffle shuffle permutation] for details.
-//
-// [Riffle shuffle permutation]: https://en.wikipedia.org/wiki/Riffle_shuffle_permutation
 func (s RiffleShuffler) Shuffle(d Deck) Deck {
 	log.Printf("Starting riffle shuffle for deck: %d", len(d))
 	r := make(Deck, 0)
