@@ -324,15 +324,15 @@ func TestDeckString(t *testing.T) {
 		expected string
 	}{
 		{
-			deck:     make([]Card, 0),
+			deck:     []Card{},
 			expected: "",
 		},
 		{
-			deck:     []Card{Card{SuitHeart, 2}},
+			deck:     []Card{{SuitHeart, 2}},
 			expected: "2H",
 		},
 		{
-			deck:     []Card{Card{SuitHeart, 2}, Card{SuitDiamond, 2}},
+			deck:     []Card{{SuitHeart, 2}, {SuitDiamond, 2}},
 			expected: "2H,2D",
 		},
 	}
@@ -340,6 +340,32 @@ func TestDeckString(t *testing.T) {
 	for _, c := range testCases {
 		t.Run("deck string", func(t *testing.T) {
 			assert.Equal(t, c.deck.String(), c.expected)
+		})
+	}
+}
+
+func TestConvertDeck(t *testing.T) {
+	testCases := []struct {
+		slug     string
+		expected Deck
+	}{
+		{
+			slug:     "",
+			expected: Deck{},
+		},
+		{
+			slug:     "10C,AD",
+			expected: Deck{Card{"C", 10}, Card{"D", Ace}},
+		},
+		{
+			slug:     "10C,AD,3H",
+			expected: Deck{Card{"C", 10}, Card{"D", Ace}, Card{"H", 3}},
+		},
+	}
+
+	for _, c := range testCases {
+		t.Run("convert deck", func(t *testing.T) {
+			assert.Equal(t, ConvertDeck(c.slug), c.expected)
 		})
 	}
 }

@@ -62,12 +62,12 @@ func OpenNewGame(r *http.Request, sessionID string) (*Game, error) {
 	tx, err := ctx.DBWriter.DB.Begin()
 	defer tx.Rollback()
 	if err != nil {
-		return nil, fmt.Errorf("Failed to create new game: %w", err)
+		return nil, fmt.Errorf("failed to create new game: %w", err)
 	}
 
 	gameRow, err := ctx.DBWriter.Query.WithTx(tx).CreateGame(r.Context())
 	if err != nil {
-		return nil, fmt.Errorf("Failed to create new game: %w", err)
+		return nil, fmt.Errorf("failed to create new game: %w", err)
 	}
 	ctx.Logger.Info("Created new game row",
 		"gameID", gameRow.ID,
@@ -85,11 +85,11 @@ func OpenNewGame(r *http.Request, sessionID string) (*Game, error) {
 		SessionID: sql.NullString{String: sessionID, Valid: true},
 	})
 	if err != nil {
-		return nil, fmt.Errorf("Failed to create new host game session: %w", err)
+		return nil, fmt.Errorf("failed to create new host game session: %w", err)
 	}
 	err = tx.Commit()
 	if err != nil {
-		return nil, fmt.Errorf("Failed to commit new host game session: %w", err)
+		return nil, fmt.Errorf("failed to commit new host game session: %w", err)
 	}
 
 	game := &Game{
@@ -105,7 +105,7 @@ func OpenNewGame(r *http.Request, sessionID string) (*Game, error) {
 func LoadGame(id string, r *http.Request) (*Game, error) {
 	gameID, err := strconv.Atoi(id)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to convert gameID '%s' to int: %w", id, err)
+		return nil, fmt.Errorf("failed to convert gameID '%s' to int: %w", id, err)
 	}
 
 	game := &Game{ID: gameID}
@@ -114,17 +114,16 @@ func LoadGame(id string, r *http.Request) (*Game, error) {
 	sess := session.GetSession(r)
 	rows, err := ctx.DBReader.Query.GetGameSessions(r.Context(), int64(gameID))
 	if err != nil {
-		return nil, fmt.Errorf("Failed to load gameID '%d' from database: %w", gameID, err)
+		return nil, fmt.Errorf("failed to load gameID '%d' from database: %w", gameID, err)
 	}
 	for _, row := range rows {
 		role := ConvertGameRole(row.Role)
-		// TODO(sean) parse the deck
-		// deck := strings.Split(row.Deck, ",")
+		deck := ConvertDeck(row.Deck)
 		switch role {
 		case Host:
-			game.Player1 = &Player{Role: Host, Deck: NewDeck()}
+			game.Player1 = &Player{Role: Host, Deck: deck}
 		case Guest:
-			game.Player2 = &Player{Role: Guest, Deck: NewDeck()}
+			game.Player2 = &Player{Role: Guest, Deck: deck}
 		default:
 			ctx.Logger.Error("Unsupported player role",
 				"sessionID", sess.ID,
@@ -232,14 +231,7 @@ func RenderHome() http.HandlerFunc {
 	}
 }
 
-// TODO(sean) remove this global state
-// Temporary global game instances
-var games map[string]*Game
-
 func SetupRoutes(mux *http.ServeMux) *http.ServeMux {
-	// TODO(sean) remove this global state
-	games = make(map[string]*Game)
-
 	mux.HandleFunc("GET /", RenderHome())
 	mux.HandleFunc("POST /game", CreateAndRenderGame())
 	mux.HandleFunc("GET /game/{id}", RenderGame())
