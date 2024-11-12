@@ -29,13 +29,13 @@ func extractSessionID(r *http.Request) (string, error) {
 	return "", nil
 }
 
-func validateSessionId(sessionID string, r *http.Request) (*Session, error) {
+func validateSessionId(sessionID string, r *http.Request) (string, error) {
 	ctx := appcontext.GetAppContext(r)
 	row, err := ctx.DBReader.Query.GetSession(r.Context(), sessionID)
 	if err != nil {
-		return nil, fmt.Errorf("session ID '%s' not recognized: %w", sessionID, err)
+		return "", fmt.Errorf("session ID '%s' not recognized: %w", sessionID, err)
 	}
-	return &Session{ID: row.ID}, nil
+	return row.ID, nil
 }
 
 const sessionIdNumBytes = 16
@@ -87,16 +87,25 @@ const sessionIDKey string = "sessionid"
 
 func WithSessionMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		sessionID, err := extractSessionID(r)
+		ctx := appcontext.GetAppContext(r)
+		rawID, err := extractSessionID(r)
 		if err != nil {
+			ctx.Logger.Error("failed to extract session ID",
+				"err", err,
+				"sessionID", rawID)
 			return
 		}
-		sess, err := validateSessionId(sessionID, r)
+		sessionID, err := validateSessionId(rawID, r)
 		if err != nil {
+			ctx.Logger.Error("invalid session ID",
+				"err", err,
+				"sessionID", sessionID)
 			return
 		}
-		ctx := context.WithValue(r.Context(), sessionIDKey, sess)
-		next.ServeHTTP(w, r.WithContext(ctx))
+		ctx.Logger.Info("loaded session for request",
+			"sessionID", sessionID)
+		c := context.WithValue(r.Context(), sessionIDKey, sessionID)
+		next.ServeHTTP(w, r.WithContext(c))
 	})
 }
 
