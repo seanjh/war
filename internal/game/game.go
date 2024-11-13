@@ -111,36 +111,50 @@ func LoadGame(rawGameID string, r *http.Request) (*Game, error) {
 	game := &Game{ID: gameID}
 
 	ctx := appcontext.GetAppContext(r)
-	sess := session.GetSession(r)
 	rows, err := ctx.DBReader.Query.GetGameSessions(r.Context(), int64(gameID))
 	if err != nil {
 		return nil, fmt.Errorf("failed to load gameID '%d' from database: %w", gameID, err)
 	}
 	for _, row := range rows {
 		role := ConvertGameRole(row.Role)
-		deck := ConvertDeck(row.Deck)
+		deck, err := ConvertDeck(row.Deck)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load deck for game ID %d: %w", gameID, err)
+		}
 		switch role {
 		case Host:
 			game.Player1 = &Player{Role: Host, Deck: deck}
 		case Guest:
 			game.Player2 = &Player{Role: Guest, Deck: deck}
 		default:
-			ctx.Logger.Error("Unsupported player role",
-				"sessionID", sess.ID,
-				"row", row)
+			return nil, fmt.Errorf("unsupported player role %s", role)
 		}
 	}
 	return game, nil
 }
 
 type PlayerContext struct {
-	GameID int
-	Player *Player
+	GameID     int
+	Player     *Player
+	BattleCard *Card
 }
 
 type GameContext struct {
 	Player1 PlayerContext
 	Player2 PlayerContext
+}
+
+func NewGameContext(game *Game) GameContext {
+	return GameContext{
+		Player1: PlayerContext{
+			GameID:     game.ID,
+			Player:     game.Player1,
+			BattleCard: &Card{Suit: SuitHeart, Value: 2}},
+		Player2: PlayerContext{
+			GameID:     game.ID,
+			Player:     game.Player2,
+			BattleCard: &Card{Suit: SuitSpade, Value: 4}},
+	}
 }
 
 func loadGameTemplates() *template.Template {
@@ -153,34 +167,50 @@ func loadGameTemplates() *template.Template {
 	))
 }
 
+func mustLoadGame(w http.ResponseWriter, r *http.Request) (*Game, error) {
+	ctx := appcontext.GetAppContext(r)
+
+	gameID := r.PathValue("id")
+	ctx.UpdateLogger(ctx.Logger.With("gameID", gameID))
+
+	game, err := LoadGame(gameID, r)
+	if err != nil {
+		ctx.Logger.Error("Failed to load game",
+			"err", err,
+			"gameID", gameID)
+		http.Error(w, "cannot locate game", http.StatusBadRequest)
+		return nil, fmt.Errorf("cannot load game with ID %s: %w", gameID, err)
+	}
+	return game, nil
+}
+
 func CreateAndRenderGame() http.HandlerFunc {
 	tmpl := loadGameTemplates()
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := appcontext.GetAppContext(r)
 
-		s := session.GetSession(r)
-		if s.ID == "" {
+		sess, err := session.LoadRequestSession(r)
+		if err != nil {
 			newSession, err := session.OpenNewSession(w, r)
-			s = newSession
+			sess = newSession
 			if err != nil {
-				ctx.Logger.Info("Failed to open new session",
-					"err", err,
-				)
-				http.Error(w, "Failed to create new session", http.StatusInternalServerError)
+				ctx.Logger.Error("Failed to open new session",
+					"err", err)
+				http.Error(w, "Failed to create game", http.StatusInternalServerError)
 				return
 			}
 		}
 
-		game, err := OpenNewGame(r, s.ID)
+		game, err := OpenNewGame(r, sess.ID)
 		if err != nil {
-			ctx.Logger.Error("Failed to create new game", "err", err)
-			http.Error(w, "Failed to create new game", http.StatusInternalServerError)
+			ctx.Logger.Error("Failed to open new game",
+				"err", err)
+			http.Error(w, "Failed to create game", http.StatusInternalServerError)
 			return
 		}
+
 		ctx.Logger.Info("Created new game and host game session",
-			"gameID", game.ID,
-		)
-		w.Header().Add("hx-push-url", fmt.Sprintf("/game/%d", game.ID))
+			"gameID", game.ID)
 
 		data := GameContext{
 			Player1: PlayerContext{GameID: game.ID, Player: game.Player1},
@@ -190,48 +220,29 @@ func CreateAndRenderGame() http.HandlerFunc {
 			ctx.Logger.Error("Failed to render game template",
 				"err", err,
 				"gameID", game.ID,
-				"sessionID", s.ID)
+				"sessionID", sess.ID)
 			http.Error(w, "Failed to render game", http.StatusInternalServerError)
 			return
 		}
+		w.Header().Add("hx-push-url", fmt.Sprintf("/game/%d", game.ID))
 	}
 }
 
 func RenderGame() http.HandlerFunc {
 	tmpl := loadGameTemplates()
 	return func(w http.ResponseWriter, r *http.Request) {
-		id := r.PathValue("id")
 		ctx := appcontext.GetAppContext(r)
 
-		s := session.GetSession(r)
-		if s.ID == "" {
-			ctx.Logger.Error("missing required session for game",
-				"gameID", id,
-				"sessionID", s.ID)
-			http.Error(w, "cannot locate game", http.StatusBadRequest)
-			return
-		}
-
-		game, err := LoadGame(id, r)
+		game, err := mustLoadGame(w, r)
 		if err != nil {
-			ctx.Logger.Error("failed to load game from database",
-				"err", err,
-				"sessionID", s.ID,
-				"gameID", id)
-			http.Error(w, "cannot locate game", http.StatusBadRequest)
 			return
 		}
 
-		data := GameContext{
-			Player1: PlayerContext{GameID: game.ID, Player: game.Player1},
-			Player2: PlayerContext{GameID: game.ID, Player: game.Player2},
-		}
+		data := NewGameContext(game)
 		err = tmpl.ExecuteTemplate(w, "layout", data)
 		if err != nil {
 			ctx.Logger.Error("ExecuteTemplate failed",
-				"err", err,
-				"gameID", game.ID,
-				"sessionID", s.ID)
+				"err", err)
 			http.Error(w, "failed to load game", http.StatusInternalServerError)
 			return
 		}
@@ -239,14 +250,23 @@ func RenderGame() http.HandlerFunc {
 }
 
 func CreateFlip() http.HandlerFunc {
-	// tmpl := template.Must(template.ParseFiles(
-	// 	filepath.Join("templates", "game.html"),
-	// 	filepath.Join("templates", "player.html"),
-	// 	filepath.Join("templates", "battleground.html"),
-	// 	filepath.Join("templates", "warzone.html"),
-	// ))
+	tmpl := loadGameTemplates()
 	return func(w http.ResponseWriter, r *http.Request) {
-		http.Error(w, "Not implemented", http.StatusInternalServerError)
+		game, err := mustLoadGame(w, r)
+		if err != nil {
+			return
+		}
+
+		ctx := appcontext.GetAppContext(r)
+		data := NewGameContext(game)
+		err = tmpl.ExecuteTemplate(w, "layout", data)
+		if err != nil {
+			ctx.Logger.Error("ExecuteTemplate failed",
+				"err", err,
+				"gameID", game.ID)
+			http.Error(w, "failed to load game", http.StatusInternalServerError)
+			return
+		}
 	}
 }
 
@@ -262,8 +282,8 @@ func RenderHome() http.HandlerFunc {
 
 func SetupRoutes(mux *http.ServeMux) *http.ServeMux {
 	mux.Handle("GET /", http.HandlerFunc(RenderHome()))
-	mux.Handle("POST /game", session.WithSessionMiddleware(CreateAndRenderGame()))
-	mux.Handle("GET /game/{id}", session.WithSessionMiddleware(RenderGame()))
-	mux.Handle("POST /game/{id}/flip", session.WithSessionMiddleware(CreateFlip()))
+	mux.Handle("POST /game", CreateAndRenderGame())
+	mux.Handle("GET /game/{id}", session.RequireSession(RenderGame()))
+	mux.Handle("POST /game/{id}/flip", session.RequireSession(CreateFlip()))
 	return mux
 }
