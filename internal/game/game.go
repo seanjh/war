@@ -208,6 +208,7 @@ func CreateAndRenderGame() http.HandlerFunc {
 			http.Error(w, "Failed to create game", http.StatusInternalServerError)
 			return
 		}
+		w.Header().Add("hx-push-url", fmt.Sprintf("/game/%d", game.ID))
 
 		ctx.Logger.Info("Created new game and host game session",
 			"gameID", game.ID)
@@ -224,7 +225,6 @@ func CreateAndRenderGame() http.HandlerFunc {
 			http.Error(w, "Failed to render game", http.StatusInternalServerError)
 			return
 		}
-		w.Header().Add("hx-push-url", fmt.Sprintf("/game/%d", game.ID))
 	}
 }
 

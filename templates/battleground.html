@@ -1,14 +1,14 @@
 {{define "battleground"}}
 <section class="flex justify-evenly">
     {{ if .Player1.BattleCard }}
-    <img src="/assets/decks/standard/{{ .Player1.BattleCard.Slug }}.svg" alt="{{ .Player1.BattleCard.Name }}" />
+    <img src="/public/decks/standard/{{ .Player1.BattleCard.Slug }}.svg" alt="{{ .Player1.BattleCard.Name }}" />
     {{ else }}
-    <img src="/assets/decks/standard/EmptyCard.svg" alt="Host Player Empty Card" />
+    <img src="/public/decks/standard/EmptyCard.svg" alt="Host Player Empty Card" />
     {{ end }}
     {{ if .Player2.BattleCard }}
-    <img src="/assets/decks/standard/{{ .Player2.BattleCard.Slug }}.svg" alt="{{ .Player2.BattleCard.Name }}" />
+    <img src="/public/decks/standard/{{ .Player2.BattleCard.Slug }}.svg" alt="{{ .Player2.BattleCard.Name }}" />
     {{ else }}
-    <img src="/assets/decks/standard/EmptyCard.svg" alt="Host Player Empty Card" />
+    <img src="/public/decks/standard/EmptyCard.svg" alt="Host Player Empty Card" />
     {{ end }}
 </section>
 {{end}}
