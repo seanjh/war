@@ -133,8 +133,11 @@ func NewDeck() Deck {
 
 // ConvertDeck converts a comma-separated string of card slugs into a Deck.
 func ConvertDeck(s string) (Deck, error) {
-	slugs := strings.Split(s, ",")
 	d := make([]Card, 0)
+	if s == "" {
+		return d, nil
+	}
+	slugs := strings.Split(s, ",")
 	for _, slug := range slugs {
 		card, err := ConvertCardSlug(slug)
 		if err != nil {
