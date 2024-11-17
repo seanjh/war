@@ -14,8 +14,9 @@ import (
 )
 
 type Player struct {
-	Deck Deck
-	Role GameRole
+	Deck    Deck
+	Role    GameRole
+	Session session.Session
 }
 
 type GameRole int64
@@ -93,10 +94,18 @@ func OpenNewGame(r *http.Request, sessionID string) (*Game, error) {
 	}
 
 	game := &Game{
-		ID:      int(gameRow.ID),
-		Player1: &Player{Deck: d1, Role: Host},
-		Player2: &Player{Deck: d2, Role: Guest},
-		Battle:  &Battle{},
+		ID: int(gameRow.ID),
+		Player1: &Player{
+			Deck:    d1,
+			Role:    Host,
+			Session: session.Session{ID: sessionID},
+		},
+		Player2: &Player{
+			Deck:    d2,
+			Role:    Guest,
+			Session: session.Session{},
+		},
+		Battle: &Battle{},
 	}
 	return game, nil
 }
@@ -123,14 +132,26 @@ func LoadGame(rawGameID string, r *http.Request) (*Game, error) {
 		}
 		switch role {
 		case Host:
-			game.Player1 = &Player{Role: Host, Deck: deck}
+			game.Player1 = &Player{
+				Role:    Host,
+				Deck:    deck,
+				Session: session.Session{ID: row.SessionID},
+			}
 		case Guest:
-			game.Player2 = &Player{Role: Guest, Deck: deck}
+			game.Player2 = &Player{
+				Role:    Guest,
+				Deck:    deck,
+				Session: session.Session{ID: row.SessionID},
+			}
 		default:
 			return nil, fmt.Errorf("unsupported player role %s", role)
 		}
 	}
 	return game, nil
+}
+
+func (game *Game) createPlay(session session.Session) error {
+	return nil
 }
 
 type PlayerContext struct {
@@ -249,7 +270,7 @@ func RenderGame() http.HandlerFunc {
 	}
 }
 
-func CreateFlip() http.HandlerFunc {
+func CreatePlay() http.HandlerFunc {
 	tmpl := loadGameTemplates()
 	return func(w http.ResponseWriter, r *http.Request) {
 		game, err := mustLoadGame(w, r)
@@ -258,6 +279,16 @@ func CreateFlip() http.HandlerFunc {
 		}
 
 		ctx := appcontext.GetAppContext(r)
+		sess := session.GetSession(r)
+
+		err = game.createPlay(sess)
+		if err != nil {
+			ctx.Logger.Error("Failed to perform card flip",
+				"err", err)
+			http.Error(w, "cannot flip", http.StatusInternalServerError)
+			return
+		}
+
 		data := NewGameContext(game)
 		err = tmpl.ExecuteTemplate(w, "layout", data)
 		if err != nil {
@@ -284,6 +315,6 @@ func SetupRoutes(mux *http.ServeMux) *http.ServeMux {
 	mux.Handle("GET /", http.HandlerFunc(RenderHome()))
 	mux.Handle("POST /game", CreateAndRenderGame())
 	mux.Handle("GET /game/{id}", session.RequireSession(RenderGame()))
-	mux.Handle("POST /game/{id}/flip", session.RequireSession(CreateFlip()))
+	mux.Handle("POST /game/{id}/play", session.RequireSession(CreatePlay()))
 	return mux
 }
