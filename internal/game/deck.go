@@ -2,7 +2,6 @@ package game
 
 import (
 	"fmt"
-	"log"
 	"math/rand/v2"
 	"strconv"
 	"strings"
@@ -133,21 +132,20 @@ func NewDeck() Deck {
 }
 
 // ConvertDeck converts a comma-separated string of card slugs into a Deck.
-func ConvertDeck(s string) Deck {
-	slugs := strings.Split(s, ",")
+func ConvertDeck(s string) (Deck, error) {
 	d := make([]Card, 0)
+	if s == "" {
+		return d, nil
+	}
+	slugs := strings.Split(s, ",")
 	for _, slug := range slugs {
-		if slug == "" {
-			continue
-		}
 		card, err := ConvertCardSlug(slug)
 		if err != nil {
-			log.Printf("invalid card slug: %s", slug)
-			continue
+			return nil, fmt.Errorf("invalid card %s: %w", slug, err)
 		}
 		d = append(d, card)
 	}
-	return d
+	return d, nil
 }
 
 // Cut returns 2 new decks, each containing exactly 1/2 of the original deck, with
@@ -195,7 +193,6 @@ func NewRiffleShuffler() *RiffleShuffler {
 }
 
 func (s RiffleShuffler) Shuffle(d Deck) Deck {
-	log.Printf("Starting riffle shuffle for deck: %d", len(d))
 	r := make(Deck, 0)
 
 	left, right := d.Cut()
@@ -221,7 +218,6 @@ func (s RiffleShuffler) Shuffle(d Deck) Deck {
 			ri++
 		}
 	}
-	log.Printf("Finished riffle shuffle for deck: %d", len(d))
 	return r
 }
 
@@ -234,9 +230,7 @@ const defaultShuffleRounds = 7
 
 // Shuffle randomly mixes the cards in the deck with the given shuffler.
 func (d *Deck) Shuffle(s Shuffler) {
-	log.Printf("Performing shuffle for deck. size=%d, rounds=%d", len(*d), defaultShuffleRounds)
 	for i := 0; i < defaultShuffleRounds; i++ {
 		*d = s.Shuffle(*d)
-		log.Printf("Finished shuffle round #%d", i+1)
 	}
 }

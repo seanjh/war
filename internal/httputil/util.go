@@ -1,6 +1,7 @@
 package httputil
 
 import (
+	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
@@ -14,10 +15,10 @@ func LogRequestMiddleware(next http.Handler, log *slog.Logger) http.Handler {
 		start := time.Now()
 		next.ServeHTTP(w, r)
 		elapsed := time.Since(start)
-		slog.Info("Handled request",
+		log.Info("Handled request",
 			"method", r.Method,
 			"path", r.URL.Path,
-			"elapsed", elapsed,
+			"elapsed", fmt.Sprintf("%s", elapsed),
 		)
 	})
 }
