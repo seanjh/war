@@ -27,24 +27,24 @@ func (q *Queries) CreateGame(ctx context.Context) (CreateGameRow, error) {
 }
 
 const createHostGameSession = `-- name: CreateHostGameSession :exec
-INSERT INTO game_sessions (game_id, session_id, role, deck) VALUES (?, ?, 1, ?), (?, NULL, 2, ?)
+INSERT INTO game_sessions (game_id, session_id, role, cards_in_hand) VALUES (?, ?, 1, ?), (?, NULL, 2, ?)
 `
 
 type CreateHostGameSessionParams struct {
-	GameID    int64
-	SessionID sql.NullString
-	Deck      string
-	GameID_2  int64
-	Deck_2    string
+	GameID        int64
+	SessionID     sql.NullString
+	CardsInHand   string
+	GameID_2      int64
+	CardsInHand_2 string
 }
 
 func (q *Queries) CreateHostGameSession(ctx context.Context, arg CreateHostGameSessionParams) error {
 	_, err := q.db.ExecContext(ctx, createHostGameSession,
 		arg.GameID,
 		arg.SessionID,
-		arg.Deck,
+		arg.CardsInHand,
 		arg.GameID_2,
-		arg.Deck_2,
+		arg.CardsInHand_2,
 	)
 	return err
 }
@@ -58,6 +58,23 @@ func (q *Queries) CreateSession(ctx context.Context, id string) (Session, error)
 	var i Session
 	err := row.Scan(&i.ID, &i.Created)
 	return i, err
+}
+
+const flipCard = `-- name: FlipCard :exec
+UPDATE game_sessions
+SET cards_in_hand = ?, cards_in_battle = ?, updated = CURRENT_TIMESTAMP
+WHERE id = ?
+`
+
+type FlipCardParams struct {
+	CardsInHand   string
+	CardsInBattle string
+	ID            int64
+}
+
+func (q *Queries) FlipCard(ctx context.Context, arg FlipCardParams) error {
+	_, err := q.db.ExecContext(ctx, flipCard, arg.CardsInHand, arg.CardsInBattle, arg.ID)
+	return err
 }
 
 const getGame = `-- name: GetGame :one
@@ -77,18 +94,62 @@ func (q *Queries) GetGame(ctx context.Context, id int64) (GetGameRow, error) {
 	return i, err
 }
 
+const getGameSession = `-- name: GetGameSession :one
+SELECT
+id, game_id, COALESCE(session_id, ''), role, cards_in_hand, cards_in_battle, cards_in_battle_hidden, cards_in_reserve
+FROM game_sessions
+WHERE game_id = ? AND session_id = ?
+LIMIT 1
+`
+
+type GetGameSessionParams struct {
+	GameID    int64
+	SessionID sql.NullString
+}
+
+type GetGameSessionRow struct {
+	ID                  int64
+	GameID              int64
+	SessionID           string
+	Role                int64
+	CardsInHand         string
+	CardsInBattle       string
+	CardsInBattleHidden string
+	CardsInReserve      string
+}
+
+func (q *Queries) GetGameSession(ctx context.Context, arg GetGameSessionParams) (GetGameSessionRow, error) {
+	row := q.db.QueryRowContext(ctx, getGameSession, arg.GameID, arg.SessionID)
+	var i GetGameSessionRow
+	err := row.Scan(
+		&i.ID,
+		&i.GameID,
+		&i.SessionID,
+		&i.Role,
+		&i.CardsInHand,
+		&i.CardsInBattle,
+		&i.CardsInBattleHidden,
+		&i.CardsInReserve,
+	)
+	return i, err
+}
+
 const getGameSessions = `-- name: GetGameSessions :many
-SELECT game_id, COALESCE(session_id, ''), role, deck
+SELECT
+game_id, COALESCE(session_id, ''), role, cards_in_hand, cards_in_battle, cards_in_battle_hidden, cards_in_reserve
 FROM game_sessions
 WHERE game_id = ?
 ORDER BY role
 `
 
 type GetGameSessionsRow struct {
-	GameID    int64
-	SessionID string
-	Role      int64
-	Deck      string
+	GameID              int64
+	SessionID           string
+	Role                int64
+	CardsInHand         string
+	CardsInBattle       string
+	CardsInBattleHidden string
+	CardsInReserve      string
 }
 
 func (q *Queries) GetGameSessions(ctx context.Context, gameID int64) ([]GetGameSessionsRow, error) {
@@ -104,7 +165,10 @@ func (q *Queries) GetGameSessions(ctx context.Context, gameID int64) ([]GetGameS
 			&i.GameID,
 			&i.SessionID,
 			&i.Role,
-			&i.Deck,
+			&i.CardsInHand,
+			&i.CardsInBattle,
+			&i.CardsInBattleHidden,
+			&i.CardsInReserve,
 		); err != nil {
 			return nil, err
 		}
@@ -129,4 +193,20 @@ func (q *Queries) GetSession(ctx context.Context, id string) (Session, error) {
 	var i Session
 	err := row.Scan(&i.ID, &i.Created)
 	return i, err
+}
+
+const guestJoinGameSession = `-- name: GuestJoinGameSession :exec
+UPDATE game_sessions
+SET session_id = ?
+WHERE game_id = ? AND session_id IS NULL
+`
+
+type GuestJoinGameSessionParams struct {
+	SessionID sql.NullString
+	GameID    int64
+}
+
+func (q *Queries) GuestJoinGameSession(ctx context.Context, arg GuestJoinGameSessionParams) error {
+	_, err := q.db.ExecContext(ctx, guestJoinGameSession, arg.SessionID, arg.GameID)
+	return err
 }
