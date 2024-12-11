@@ -57,8 +57,8 @@ func (w *War) flip() error {
 		supporting[i] = w.Hand[i]
 		w.Hand = w.Hand[1:]
 	}
-	card := w.Hand[0]
-	w.Hand = w.Hand[1:]
+	// card := w.Hand[0]
+	// w.Hand = w.Hand[1:]
 	// supporting, battling, hand := w.Hand[], w.Hand[0], w.Hand[take:]
 
 	if take == 1 {
@@ -246,6 +246,7 @@ type PlayerContext struct {
 	GameID     int
 	Player     *Player
 	BattleCard *Card
+	TotalCards int
 }
 
 type GameContext struct {
@@ -258,11 +259,15 @@ func NewGameContext(game *Game) GameContext {
 		Player1: PlayerContext{
 			GameID:     game.ID,
 			Player:     game.Player1,
-			BattleCard: &Card{Suit: SuitHeart, Value: 2}},
+			BattleCard: &Card{Suit: SuitHeart, Value: 2},
+			TotalCards: len(game.Player1.CardsInHand) + len(game.Player1.CardsWon),
+		},
 		Player2: PlayerContext{
 			GameID:     game.ID,
 			Player:     game.Player2,
-			BattleCard: &Card{Suit: SuitSpade, Value: 4}},
+			BattleCard: &Card{Suit: SuitSpade, Value: 4},
+			TotalCards: len(game.Player2.CardsInHand) + len(game.Player2.CardsWon),
+		},
 	}
 }
 
@@ -322,10 +327,7 @@ func CreateAndRenderGame() http.HandlerFunc {
 		ctx.Logger.Info("Created new game and host game session",
 			"gameID", game.ID)
 
-		data := GameContext{
-			Player1: PlayerContext{GameID: game.ID, Player: game.Player1},
-			Player2: PlayerContext{GameID: game.ID, Player: game.Player2},
-		}
+		data := NewGameContext(game)
 		if err := tmpl.ExecuteTemplate(w, "layout", data); err != nil {
 			ctx.Logger.Error("Failed to render game template",
 				"err", err,
