@@ -1,6 +1,7 @@
 package game
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -30,7 +31,7 @@ func TestCardName(t *testing.T) {
 	}
 
 	for _, c := range testCases {
-		t.Run("card name", func(t *testing.T) {
+		t.Run("card human-readable name", func(t *testing.T) {
 			assert.Equal(t, c.card.Name(), c.expected)
 		})
 	}
@@ -58,9 +59,10 @@ func TestCardSlug(t *testing.T) {
 			expected: "AS",
 		},
 	}
+	assert := assert.New(t)
 	for _, c := range testCases {
-		t.Run("card slug", func(t *testing.T) {
-			assert.Equal(t, c.card.Slug(), c.expected)
+		t.Run("convert card to slug-style string", func(t *testing.T) {
+			assert.Equal(c.card.Slug(), c.expected)
 		})
 	}
 }
@@ -151,11 +153,12 @@ func TestCutDeck(t *testing.T) {
 		},
 	}
 
+	assert := assert.New(t)
 	for _, c := range testCases {
 		t.Run(c.scenario, func(t *testing.T) {
 			left, right := c.deck.Cut()
-			assert.Equal(t, c.expectedLeft, left)
-			assert.Equal(t, c.expectedRight, right)
+			assert.Equal(c.expectedLeft, left)
+			assert.Equal(c.expectedRight, right)
 		})
 	}
 }
@@ -309,11 +312,12 @@ func TestShuffle(t *testing.T) {
 	nonRandom := func() float32 { return 0.0 }
 	s := RiffleShuffler{random: nonRandom}
 
+	assert := assert.New(t)
 	for _, c := range testCases {
 		t.Run(c.scenario, func(t *testing.T) {
 			c.deck.Shuffle(s)
-			assert.Len(t, c.deck, len(c.expected))
-			assert.Equal(t, c.expected, c.deck)
+			assert.Len(c.deck, len(c.expected))
+			assert.Equal(c.expected, c.deck)
 		})
 	}
 }
@@ -337,35 +341,44 @@ func TestDeckString(t *testing.T) {
 		},
 	}
 
+	assert := assert.New(t)
 	for _, c := range testCases {
-		t.Run("deck string", func(t *testing.T) {
-			assert.Equal(t, c.deck.String(), c.expected)
+		t.Run("convert deck to string", func(t *testing.T) {
+			assert.Equal(c.deck.String(), c.expected)
 		})
 	}
 }
 
 func TestConvertDeck(t *testing.T) {
 	testCases := []struct {
+		scenario string
 		slug     string
 		expected Deck
 	}{
 		{
+			scenario: "empty deck",
 			slug:     "",
 			expected: Deck{},
 		},
 		{
+			scenario: "two card deck",
 			slug:     "10C,AD",
 			expected: Deck{Card{"C", 10}, Card{"D", Ace}},
 		},
 		{
+			scenario: "three card deck",
 			slug:     "10C,AD,3H",
 			expected: Deck{Card{"C", 10}, Card{"D", Ace}, Card{"H", 3}},
 		},
 	}
 
+	assert := assert.New(t)
 	for _, c := range testCases {
-		t.Run("convert deck", func(t *testing.T) {
-			assert.Equal(t, ConvertDeck(c.slug), c.expected)
+		t.Run(fmt.Sprintf("convert string to %s", c.scenario), func(t *testing.T) {
+			d, err := ConvertDeck(c.slug)
+			if assert.Nil(err) {
+				assert.Equal(d, c.expected)
+			}
 		})
 	}
 }

@@ -32,6 +32,10 @@ func (c *AppContext) Middleware(next http.Handler) http.Handler {
 	})
 }
 
+func (c *AppContext) UpdateLogger(l *slog.Logger) {
+	c.Logger = l
+}
+
 // GetAppContext returns the application context for the request.
 func GetAppContext(r *http.Request) *AppContext {
 	ctx, ok := r.Context().Value(appContextKey).(*AppContext)
